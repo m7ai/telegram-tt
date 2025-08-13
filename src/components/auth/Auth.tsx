@@ -1,36 +1,33 @@
-import '../../global/actions/initial';
+import "../../global/actions/initial";
 
-import type { FC } from '../../lib/teact/teact';
-import { memo, useRef } from '../../lib/teact/teact';
-import { getActions, withGlobal } from '../../global';
+import type { FC } from "../../lib/teact/teact";
+import { memo, useRef } from "../../lib/teact/teact";
+import { getActions, withGlobal } from "../../global";
 
-import type { GlobalState } from '../../global/types';
+import type { GlobalState } from "../../global/types";
 
-import { PLATFORM_ENV } from '../../util/browser/windowEnvironment';
+import { PLATFORM_ENV } from "../../util/browser/windowEnvironment";
 
-import useCurrentOrPrev from '../../hooks/useCurrentOrPrev';
-import useElectronDrag from '../../hooks/useElectronDrag';
-import useHistoryBack from '../../hooks/useHistoryBack';
+import useCurrentOrPrev from "../../hooks/useCurrentOrPrev";
+import useElectronDrag from "../../hooks/useElectronDrag";
+import useHistoryBack from "../../hooks/useHistoryBack";
 
-import Transition from '../ui/Transition';
-import AuthCode from './AuthCode.async';
-import AuthPassword from './AuthPassword.async';
-import AuthPhoneNumber from './AuthPhoneNumber';
-import AuthQrCode from './AuthQrCode';
-import AuthRegister from './AuthRegister.async';
+import Transition from "../ui/Transition";
+import AuthCode from "./AuthCode.async";
+import AuthPassword from "./AuthPassword.async";
+import AuthPhoneNumber from "./AuthPhoneNumber";
+import AuthQrCode from "./AuthQrCode";
+import AuthRegister from "./AuthRegister.async";
+import AuthWalletCreated from "./AuthWalletCreated";
 
-import './Auth.scss';
+import "./Auth.scss";
 
-type StateProps = Pick<GlobalState, 'authState'>;
+type StateProps = Pick<GlobalState, "authState">;
 
-const Auth: FC<StateProps> = ({
-  authState,
-}) => {
-  const {
-    returnToAuthPhoneNumber, goToAuthQrCode,
-  } = getActions();
+const Auth: FC<StateProps> = ({ authState }) => {
+  const { returnToAuthPhoneNumber, goToAuthQrCode } = getActions();
 
-  const isMobile = PLATFORM_ENV === 'iOS' || PLATFORM_ENV === 'Android';
+  const isMobile = PLATFORM_ENV === "iOS" || PLATFORM_ENV === "Android";
 
   const handleChangeAuthorizationMethod = () => {
     if (!isMobile) {
@@ -41,8 +38,9 @@ const Auth: FC<StateProps> = ({
   };
 
   useHistoryBack({
-    isActive: (!isMobile && authState === 'authorizationStateWaitPhoneNumber')
-      || (isMobile && authState === 'authorizationStateWaitQrCode'),
+    isActive:
+      (!isMobile && authState === "authorizationStateWaitPhoneNumber") ||
+      (isMobile && authState === "authorizationStateWaitQrCode"),
     onBack: handleChangeAuthorizationMethod,
   });
 
@@ -51,22 +49,24 @@ const Auth: FC<StateProps> = ({
 
   // For animation purposes
   const renderingAuthState = useCurrentOrPrev(
-    authState !== 'authorizationStateReady' ? authState : undefined,
-    true,
+    authState !== "authorizationStateReady" ? authState : undefined,
+    true
   );
 
   function getScreen() {
     switch (renderingAuthState) {
-      case 'authorizationStateWaitCode':
+      case "authorizationStateWaitCode":
         return <AuthCode />;
-      case 'authorizationStateWaitPassword':
+      case "authorizationStateWaitPassword":
         return <AuthPassword />;
-      case 'authorizationStateWaitRegistration':
+      case "authorizationStateWaitRegistration":
         return <AuthRegister />;
-      case 'authorizationStateWaitPhoneNumber':
+      case "authorizationStateWaitPhoneNumber":
         return <AuthPhoneNumber />;
-      case 'authorizationStateWaitQrCode':
+      case "authorizationStateWaitQrCode":
         return <AuthQrCode />;
+      case "authorizationStateWalletCreated":
+        return <AuthWalletCreated />;
       default:
         return isMobile ? <AuthPhoneNumber /> : <AuthQrCode />;
     }
@@ -74,32 +74,39 @@ const Auth: FC<StateProps> = ({
 
   function getActiveKey() {
     switch (renderingAuthState) {
-      case 'authorizationStateWaitCode':
+      case "authorizationStateWaitCode":
         return 0;
-      case 'authorizationStateWaitPassword':
+      case "authorizationStateWaitPassword":
         return 1;
-      case 'authorizationStateWaitRegistration':
+      case "authorizationStateWaitRegistration":
         return 2;
-      case 'authorizationStateWaitPhoneNumber':
+      case "authorizationStateWaitPhoneNumber":
         return 3;
-      case 'authorizationStateWaitQrCode':
+      case "authorizationStateWaitQrCode":
         return 4;
+      case "authorizationStateWalletCreated":
+        return 5;
       default:
         return isMobile ? 3 : 4;
     }
   }
 
   return (
-    <Transition activeKey={getActiveKey()} name="fade" className="Auth" ref={containerRef}>
+    <Transition
+      activeKey={getActiveKey()}
+      name="fade"
+      className="Auth"
+      ref={containerRef}
+    >
       {getScreen()}
     </Transition>
   );
 };
 
-export default memo(withGlobal(
-  (global): StateProps => {
+export default memo(
+  withGlobal((global): StateProps => {
     return {
       authState: global.authState,
     };
-  },
-)(Auth));
+  })(Auth)
+);

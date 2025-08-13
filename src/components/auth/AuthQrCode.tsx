@@ -1,50 +1,49 @@
-import {
-  memo, useLayoutEffect, useRef,
-} from '../../lib/teact/teact';
-import { getActions, withGlobal } from '../../global';
+import { memo, useLayoutEffect, useRef } from "../../lib/teact/teact";
+import { getActions, withGlobal } from "../../global";
 
-import type { GlobalState } from '../../global/types';
+import type { GlobalState } from "../../global/types";
 
-import { STRICTERDOM_ENABLED } from '../../config';
-import { disableStrict, enableStrict } from '../../lib/fasterdom/stricterdom';
-import { selectSharedSettings } from '../../global/selectors/sharedState';
-import buildClassName from '../../util/buildClassName';
-import { oldSetLanguage } from '../../util/oldLangProvider';
-import { LOCAL_TGS_URLS } from '../common/helpers/animatedAssets';
-import { navigateBack } from './helpers/backNavigation';
-import { getSuggestedLanguage } from './helpers/getSuggestedLanguage';
+import { STRICTERDOM_ENABLED } from "../../config";
+import { disableStrict, enableStrict } from "../../lib/fasterdom/stricterdom";
+import { selectSharedSettings } from "../../global/selectors/sharedState";
+import buildClassName from "../../util/buildClassName";
+import { oldSetLanguage } from "../../util/oldLangProvider";
+import { LOCAL_TGS_URLS } from "../common/helpers/animatedAssets";
+import { navigateBack } from "./helpers/backNavigation";
+import { getSuggestedLanguage } from "./helpers/getSuggestedLanguage";
 
-import useAsync from '../../hooks/useAsync';
-import useFlag from '../../hooks/useFlag';
-import useLang from '../../hooks/useLang';
-import useLangString from '../../hooks/useLangString';
-import useLastCallback from '../../hooks/useLastCallback';
-import useMediaTransitionDeprecated from '../../hooks/useMediaTransitionDeprecated';
-import useMultiaccountInfo from '../../hooks/useMultiaccountInfo';
+import useAsync from "../../hooks/useAsync";
+import useFlag from "../../hooks/useFlag";
+import useLang from "../../hooks/useLang";
+import useLangString from "../../hooks/useLangString";
+import useLastCallback from "../../hooks/useLastCallback";
+import useMediaTransitionDeprecated from "../../hooks/useMediaTransitionDeprecated";
+import useMultiaccountInfo from "../../hooks/useMultiaccountInfo";
 
-import AnimatedIcon from '../common/AnimatedIcon';
-import Icon from '../common/icons/Icon';
-import Button from '../ui/Button';
-import Loading from '../ui/Loading';
+import AnimatedIcon from "../common/AnimatedIcon";
+import Icon from "../common/icons/Icon";
+import Button from "../ui/Button";
+import Loading from "../ui/Loading";
 
-import blankUrl from '../../assets/blank.png';
+import blankUrl from "../../assets/blank.png";
 
-type StateProps =
-  Pick<GlobalState, 'connectionState' | 'authState' | 'authQrCode'>
-  & {
-    language?: string;
-  };
+type StateProps = Pick<
+  GlobalState,
+  "connectionState" | "authState" | "authQrCode"
+> & {
+  language?: string;
+};
 
-const DATA_PREFIX = 'tg://login?token=';
-const QR_SIZE = 280;
-const QR_PLANE_SIZE = 54;
+const DATA_PREFIX = "tg://login?token=";
+const QR_SIZE = 126;
+const QR_PLANE_SIZE = 24;
 const QR_CODE_MUTATION_DURATION = 50; // The library is asynchronous and we need to wait for its mutation code
 
-let qrCodeStylingPromise: Promise<typeof import('qr-code-styling')> | undefined;
+let qrCodeStylingPromise: Promise<typeof import("qr-code-styling")> | undefined;
 
 function ensureQrCodeStyling() {
   if (!qrCodeStylingPromise) {
-    qrCodeStylingPromise = import('qr-code-styling');
+    qrCodeStylingPromise = import("qr-code-styling");
   }
   return qrCodeStylingPromise;
 }
@@ -55,17 +54,17 @@ const AuthCode = ({
   authQrCode,
   language,
 }: StateProps) => {
-  const {
-    returnToAuthPhoneNumber,
-    setSharedSettingOption,
-  } = getActions();
+  const { returnToAuthPhoneNumber, setSharedSettingOption } = getActions();
 
   const suggestedLanguage = getSuggestedLanguage();
   const lang = useLang();
   const qrCodeRef = useRef<HTMLDivElement>();
 
-  const isConnected = connectionState === 'connectionStateReady';
-  const continueText = useLangString('AuthContinueOnThisLanguage', suggestedLanguage);
+  const isConnected = connectionState === "connectionStateReady";
+  const continueText = useLangString(
+    "AuthContinueOnThisLanguage",
+    suggestedLanguage
+  );
   const [isLoading, markIsLoading, unmarkIsLoading] = useFlag();
   const [isQrMounted, markQrMounted, unmarkQrMounted] = useFlag();
 
@@ -79,19 +78,19 @@ const AuthCode = ({
       height: QR_SIZE,
       image: blankUrl,
       margin: 10,
-      type: 'svg',
+      type: "svg",
       dotsOptions: {
-        type: 'rounded',
+        type: "rounded",
       },
       cornersSquareOptions: {
-        type: 'extra-rounded',
+        type: "extra-rounded",
       },
       imageOptions: {
         imageSize: 0.4,
         margin: 8,
       },
       qrOptions: {
-        errorCorrectionLevel: 'M',
+        errorCorrectionLevel: "M",
       },
     });
   }, []);
@@ -152,59 +151,100 @@ const AuthCode = ({
     returnToAuthPhoneNumber();
   });
 
-  const isAuthReady = authState === 'authorizationStateWaitQrCode';
+  const isAuthReady = authState === "authorizationStateWaitQrCode";
 
   return (
     <div id="auth-qr-form" className="custom-scroll">
       {hasActiveAccount && (
-        <Button size="smaller" round color="translucent" className="auth-close" onClick={handleBackNavigation}>
+        <Button
+          size="smaller"
+          round
+          color="translucent"
+          className="auth-close"
+          onClick={handleBackNavigation}
+        >
           <Icon name="close" />
         </Button>
       )}
-      <div className="auth-form qr">
-        <div className="qr-outer">
-          <div
-            className={buildClassName('qr-inner', transitionClassNames)}
-            key="qr-inner"
-          >
-            <div
-              key="qr-container"
-              className="qr-container"
-              ref={qrCodeRef}
-              style={`width: ${QR_SIZE}px; height: ${QR_SIZE}px`}
-            />
-            <AnimatedIcon
-              tgsUrl={LOCAL_TGS_URLS.QrPlane}
-              size={QR_PLANE_SIZE}
-              className="qr-plane"
-              nonInteractive
-              noLoop={false}
-            />
-          </div>
-          {!isQrMounted && <div className="qr-loading"><Loading /></div>}
+      <div className="auth-container">
+        <div className="auth-header">
+          <div className="auth-header-title">M7 Log in</div>
         </div>
-        <h1>{lang('LoginQRTitle')}</h1>
-        <ol>
-          <li><span>{lang('LoginQRHelp1')}</span></li>
-          <li><span>{lang('LoginQRHelp2', undefined, { withNodes: true, withMarkdown: true })}</span></li>
-          <li><span>{lang('LoginQRHelp3')}</span></li>
-        </ol>
+        <div className="auth-form qr">
+          <div className="qr-outer">
+            <div
+              className={buildClassName("qr-inner", transitionClassNames)}
+              key="qr-inner"
+            >
+              <div
+                key="qr-container"
+                className="qr-container"
+                ref={qrCodeRef}
+                style={`width: ${QR_SIZE}px; height: ${QR_SIZE}px`}
+              />
+              <AnimatedIcon
+                tgsUrl={LOCAL_TGS_URLS.QrPlane}
+                size={QR_PLANE_SIZE}
+                className="qr-plane"
+                nonInteractive
+                noLoop={false}
+              />
+            </div>
+            {!isQrMounted && (
+              <div className="qr-loading">
+                <Loading />
+              </div>
+            )}
+          </div>
+          <h1>{lang("LoginQRTitle")}</h1>
+          <p className="qr-subtitle">{lang("LoginQRSubtitle")}</p>
+          <ol>
+            <li>
+              <span>{lang("LoginQRHelp1")}</span>
+            </li>
+            <li>
+              <span>
+                {lang("LoginQRHelp2", undefined, {
+                  withNodes: true,
+                  withMarkdown: true,
+                })}
+              </span>
+            </li>
+            <li>
+              <span>{lang("LoginQRHelp3")}</span>
+            </li>
+          </ol>
+          {suggestedLanguage &&
+            suggestedLanguage !== language &&
+            continueText && (
+              <Button
+                size="smaller"
+                isText
+                isLoading={isLoading}
+                onClick={handleLangChange}
+              >
+                {continueText}
+              </Button>
+            )}
+        </div>
         {isAuthReady && (
-          <Button size="smaller" isText onClick={handleReturnToAuthPhoneNumber}>{lang('LoginQRCancel')}</Button>
-        )}
-        {suggestedLanguage && suggestedLanguage !== language && continueText && (
-          <Button size="smaller" isText isLoading={isLoading} onClick={handleLangChange}>{continueText}</Button>
+          <div className="auth-footer">
+            <Button
+              className="login-button"
+              onClick={handleReturnToAuthPhoneNumber}
+            >
+              {lang("LoginQRCancel")}
+            </Button>
+          </div>
         )}
       </div>
     </div>
   );
 };
 
-export default memo(withGlobal(
-  (global): StateProps => {
-    const {
-      connectionState, authState, authQrCode,
-    } = global;
+export default memo(
+  withGlobal((global): StateProps => {
+    const { connectionState, authState, authQrCode } = global;
 
     const { language } = selectSharedSettings(global);
 
@@ -214,5 +254,5 @@ export default memo(withGlobal(
       authQrCode,
       language,
     };
-  },
-)(AuthCode));
+  })(AuthCode)
+);

@@ -24,6 +24,7 @@ const {
   APP_ENV = 'production',
   APP_MOCKED_CLIENT = '',
   APP_BYPASS_AUTH = '',
+  APP_WALLET_CREATED = '',
   IS_PACKAGED_ELECTRON,
 } = process.env;
 
@@ -205,6 +206,7 @@ export default function createConfig(
         APP_ENV,
         APP_MOCKED_CLIENT,
         APP_BYPASS_AUTH,
+        APP_WALLET_CREATED,
         // eslint-disable-next-line no-null/no-null
         APP_NAME: null,
         APP_TITLE,

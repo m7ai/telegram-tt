@@ -1,4 +1,9 @@
-import { DEBUG, DEBUG_ALERT_MSG, IS_BYPASS_AUTH } from "../config";
+import {
+  DEBUG,
+  DEBUG_ALERT_MSG,
+  IS_BYPASS_AUTH,
+  IS_WALLET_CREATED,
+} from "../config";
 import { isCurrentTabMaster } from "./establishMultitabRole";
 import { throttle } from "./schedulers";
 
@@ -40,6 +45,13 @@ export function handleError(err: Error) {
   if (IS_BYPASS_AUTH) {
     // eslint-disable-next-line no-console
     console.log(">>> SUPPRESSING ERROR - BYPASS AUTH MODE:", err);
+    return;
+  }
+
+  // Suppress errors in wallet created dev mode (except for console logging)
+  if (IS_WALLET_CREATED) {
+    // eslint-disable-next-line no-console
+    console.log(">>> SUPPRESSING ERROR - WALLET CREATED DEV MODE:", err);
     return;
   }
 

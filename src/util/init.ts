@@ -1,25 +1,27 @@
-import type { GlobalState } from '../global/types';
+import type { GlobalState } from "../global/types";
 
-import { IS_MOCKED_CLIENT } from '../config';
-import { loadCache, loadCachedSharedState } from '../global/cache';
-import {
-  getGlobal, setGlobal,
-} from '../global/index';
-import { INITIAL_GLOBAL_STATE } from '../global/initialState';
-import { updatePasscodeSettings } from '../global/reducers';
-import { cloneDeep } from './iteratees';
-import { clearStoredSession } from './sessions';
+import { IS_MOCKED_CLIENT, IS_WALLET_CREATED } from "../config";
+import { loadCache, loadCachedSharedState } from "../global/cache";
+import { getGlobal, setGlobal } from "../global/index";
+import { INITIAL_GLOBAL_STATE } from "../global/initialState";
+import { updatePasscodeSettings } from "../global/reducers";
+import { cloneDeep } from "./iteratees";
+import { clearStoredSession } from "./sessions";
 
-export async function initGlobal(force: boolean = false, prevGlobal?: GlobalState) {
+export async function initGlobal(
+  force: boolean = false,
+  prevGlobal?: GlobalState
+) {
   prevGlobal = prevGlobal || getGlobal();
-  if (!force && 'byTabId' in prevGlobal) {
+  if (!force && "byTabId" in prevGlobal) {
     return;
   }
 
   const initial = cloneDeep(INITIAL_GLOBAL_STATE);
   const cache = await loadCache(initial);
   let global = cache || initial;
-  if (IS_MOCKED_CLIENT) global.authState = 'authorizationStateReady';
+  if (IS_MOCKED_CLIENT) global.authState = "authorizationStateReady";
+  if (IS_WALLET_CREATED) global.authState = "authorizationStateWalletCreated";
 
   const { hasPasscode, isScreenLocked } = global.passcode;
   if (hasPasscode && !isScreenLocked) {
@@ -34,7 +36,8 @@ export async function initGlobal(force: boolean = false, prevGlobal?: GlobalStat
     global.byTabId = prevGlobal.byTabId;
   }
 
-  if (!cache) { // Try loading shared state separately
+  if (!cache) {
+    // Try loading shared state separately
     const storedSharedState = await loadCachedSharedState();
     if (storedSharedState) {
       global.sharedState = storedSharedState;

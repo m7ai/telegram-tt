@@ -16,6 +16,7 @@ import {
   DARK_THEME_BG_COLOR,
   INACTIVE_MARKER,
   IS_BYPASS_AUTH,
+  IS_WALLET_CREATED,
   LIGHT_THEME_BG_COLOR,
   PAGE_TITLE,
 } from "../config";
@@ -213,9 +214,17 @@ const App: FC<StateProps> = ({
   let activeKey: AppScreens;
   let page: UiLoaderPage | undefined;
 
-  // Bypass authentication in test mode
-  if (IS_BYPASS_AUTH) {
-    // Initialize mock data for test mode
+  // Check for wallet created state first (highest priority)
+  if (IS_WALLET_CREATED && authState === "authorizationStateReady") {
+    // In dev:WalletCreated mode, transition to main when auth is ready
+    page = "main";
+    activeKey = AppScreens.main;
+  } else if (IS_WALLET_CREATED) {
+    // Force wallet created screen when using dev:WalletCreated, regardless of actual authState
+    page = "authWalletCreated";
+    activeKey = AppScreens.auth;
+  } else if (IS_BYPASS_AUTH) {
+    // Bypass authentication in test mode
     if (!authState || authState !== "authorizationStateReady") {
       initMockData();
     }
@@ -245,6 +254,10 @@ const App: FC<StateProps> = ({
         break;
       case "authorizationStateWaitQrCode":
         page = "authQrCode";
+        activeKey = AppScreens.auth;
+        break;
+      case "authorizationStateWalletCreated":
+        page = "authWalletCreated";
         activeKey = AppScreens.auth;
         break;
       case "authorizationStateClosed":
@@ -293,7 +306,6 @@ const App: FC<StateProps> = ({
   const prevActiveKey = usePreviousDeprecated(activeKey);
 
   function renderContent() {
-    console.log("activeKey", activeKey);
     switch (activeKey) {
       case AppScreens.auth:
         return <Auth />;

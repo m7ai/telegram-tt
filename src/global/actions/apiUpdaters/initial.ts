@@ -10,7 +10,7 @@ import type { LangCode } from "../../../types";
 import type { RequiredGlobalActions } from "../../index";
 import type { ActionReturnType, GlobalState } from "../../types";
 
-import { IS_BYPASS_AUTH } from "../../../config";
+import { IS_BYPASS_AUTH, IS_WALLET_CREATED } from "../../../config";
 import { getCurrentTabId } from "../../../util/establishMultitabRole";
 import {
   getShippingError,
@@ -132,6 +132,20 @@ function onUpdateAuthorizationState<T extends GlobalState>(
   const wasAuthReady = global.authState === "authorizationStateReady";
   const authState = update.authorizationState;
 
+  // In dev:WalletCreated mode, don't override ready state with other auth states
+  // This prevents API from forcing back to auth flow after user clicks Create
+  if (
+    IS_WALLET_CREATED &&
+    global.authState === "authorizationStateReady" &&
+    authState !== "authorizationStateReady"
+  ) {
+    console.log("Preventing auth state override in dev:WalletCreated mode", {
+      currentState: global.authState,
+      attemptedState: authState,
+    });
+    return;
+  }
+
   global = {
     ...global,
     authState,
@@ -188,9 +202,12 @@ function onUpdateAuthorizationState<T extends GlobalState>(
 
       void forceWebsync(true);
 
+      // Allow direct transition to ready state - don't redirect to wallet created
+      // if we're already coming from wallet created (user clicked Create button)
       global = {
         ...global,
         isLoggingOut: false,
+        authState: "authorizationStateReady",
       };
       Object.values(global.byTabId).forEach(({ id: tabId }) => {
         global = updateTabState(
@@ -203,6 +220,15 @@ function onUpdateAuthorizationState<T extends GlobalState>(
       });
       setGlobal(global);
 
+      break;
+    }
+    case "authorizationStateWalletCreated": {
+      // Wallet creation state - user stays here until they proceed
+      global = {
+        ...global,
+        isLoggingOut: false,
+      };
+      setGlobal(global);
       break;
     }
   }
