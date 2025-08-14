@@ -53,9 +53,6 @@ import Main from "./main/Main.async";
 import Transition from "./ui/Transition";
 
 import styles from "./App.module.scss";
-import TVChart from "./tradingview/TVChart/TVChart";
-import type { HMPoolTokenMetadata } from "../hooks/hellomoon/hmApi";
-import { fetchPoolTokenMetadata } from "../hooks/hellomoon/hmApi";
 
 type StateProps = {
   authState: GlobalState["authState"];

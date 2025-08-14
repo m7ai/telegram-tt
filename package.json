@@ -138,7 +138,9 @@
   },
   "dependencies": {
     "@cryptography/aes": "^0.1.1",
+    "@solana/web3.js": "^1.98.4",
     "async-mutex": "^0.5.0",
+    "axios": "^1.11.0",
     "big-integer": "github:painor/BigInteger.js",
     "bignumber.js": "^9.3.1",
     "emoji-data-ios": "git+https://github.com/korenskoy/emoji-data-ios#443f1c9d7b16a82e7ee53f7f226d7d9a9920a105",

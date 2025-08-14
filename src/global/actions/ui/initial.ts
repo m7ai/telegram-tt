@@ -1,118 +1,142 @@
-import { addCallback } from '../../../lib/teact/teactn';
+import { addCallback } from "../../../lib/teact/teactn";
 
-import type { LangCode } from '../../../types';
-import type { ActionReturnType, GlobalState } from '../../types';
+import type { LangCode } from "../../../types";
+import type { ActionReturnType, GlobalState } from "../../types";
 
-import { requestMutation } from '../../../lib/fasterdom/fasterdom';
-import { IS_MULTIACCOUNT_SUPPORTED } from '../../../util/browser/globalEnvironment';
+import { requestMutation } from "../../../lib/fasterdom/fasterdom";
+import { IS_MULTIACCOUNT_SUPPORTED } from "../../../util/browser/globalEnvironment";
 import {
-  IS_ANDROID, IS_ELECTRON, IS_IOS, IS_LINUX,
-  IS_MAC_OS, IS_SAFARI, IS_TOUCH_ENV, IS_WINDOWS,
-} from '../../../util/browser/windowEnvironment';
-import { getCurrentTabId } from '../../../util/establishMultitabRole';
-import { subscribe, unsubscribe } from '../../../util/notifications';
-import { oldSetLanguage } from '../../../util/oldLangProvider';
-import { decryptSessionByCurrentHash } from '../../../util/passcode';
-import { applyPerformanceSettings } from '../../../util/perfomanceSettings';
-import { hasStoredSession, storeSession } from '../../../util/sessions';
-import switchTheme from '../../../util/switchTheme';
-import { getSystemTheme, setSystemThemeChangeCallback } from '../../../util/systemTheme';
-import { startWebsync, stopWebsync } from '../../../util/websync';
-import { callApi } from '../../../api/gramjs';
-import { clearCaching, setupCaching } from '../../cache';
-import { addActionHandler, getGlobal, setGlobal } from '../../index';
-import { updateSharedSettings } from '../../reducers';
-import { updateTabState } from '../../reducers/tabs';
+  IS_ANDROID,
+  IS_ELECTRON,
+  IS_IOS,
+  IS_LINUX,
+  IS_MAC_OS,
+  IS_SAFARI,
+  IS_TOUCH_ENV,
+  IS_WINDOWS,
+} from "../../../util/browser/windowEnvironment";
+import { getCurrentTabId } from "../../../util/establishMultitabRole";
+import { subscribe, unsubscribe } from "../../../util/notifications";
+import { oldSetLanguage } from "../../../util/oldLangProvider";
+import { decryptSessionByCurrentHash } from "../../../util/passcode";
+import { applyPerformanceSettings } from "../../../util/perfomanceSettings";
+import { hasStoredSession, storeSession } from "../../../util/sessions";
+import switchTheme from "../../../util/switchTheme";
+import {
+  getSystemTheme,
+  setSystemThemeChangeCallback,
+} from "../../../util/systemTheme";
+import { startWebsync, stopWebsync } from "../../../util/websync";
+import { callApi } from "../../../api/gramjs";
+import { clearCaching, setupCaching } from "../../cache";
+import { addActionHandler, getGlobal, setGlobal } from "../../index";
+import { updateSharedSettings } from "../../reducers";
+import { updateTabState } from "../../reducers/tabs";
 import {
   selectCanAnimateInterface,
   selectPerformanceSettings,
   selectSettingsKeys,
   selectTabState,
   selectTheme,
-} from '../../selectors';
-import { selectSharedSettings } from '../../selectors/sharedState';
-import { destroySharedStatePort, initSharedState } from '../../shared/sharedStateConnector';
+} from "../../selectors";
+import { selectSharedSettings } from "../../selectors/sharedState";
+import {
+  destroySharedStatePort,
+  initSharedState,
+} from "../../shared/sharedStateConnector";
 
 const HISTORY_ANIMATION_DURATION = 450;
 
 setSystemThemeChangeCallback((theme) => {
   let global = getGlobal();
 
-  if (!global.isInited || !selectSharedSettings(global).shouldUseSystemTheme) return;
+  if (!global.isInited || !selectSharedSettings(global).shouldUseSystemTheme)
+    return;
 
   global = updateSharedSettings(global, { theme });
   setGlobal(global);
 });
 
-addActionHandler('switchMultitabRole', async (global, actions, payload): Promise<void> => {
-  const { isMasterTab, tabId = getCurrentTabId() } = payload;
+addActionHandler(
+  "switchMultitabRole",
+  async (global, actions, payload): Promise<void> => {
+    const { isMasterTab, tabId = getCurrentTabId() } = payload;
 
-  if (isMasterTab === selectTabState(global, tabId).isMasterTab) {
-    callApi('broadcastLocalDbUpdateFull');
-    return;
+    if (isMasterTab === selectTabState(global, tabId).isMasterTab) {
+      callApi("broadcastLocalDbUpdateFull");
+      return;
+    }
+
+    global = updateTabState(
+      global,
+      {
+        isMasterTab,
+      },
+      tabId
+    );
+    setGlobal(global, { forceSyncOnIOs: true });
+
+    if (!isMasterTab) {
+      void unsubscribe();
+      actions.destroyConnection();
+      stopWebsync();
+      destroySharedStatePort();
+      clearCaching();
+      actions.onSomeTabSwitchedMultitabRole();
+    } else {
+      if (global.passcode.hasPasscode && !global.passcode.isScreenLocked) {
+        const { sessionJson } = await decryptSessionByCurrentHash();
+        const session = JSON.parse(sessionJson);
+        storeSession(session);
+      }
+
+      if (hasStoredSession()) {
+        setupCaching();
+      }
+
+      global = getGlobal();
+      if (!global.passcode.hasPasscode || !global.passcode.isScreenLocked) {
+        if (global.connectionState === "connectionStateReady") {
+          global = {
+            ...global,
+            connectionState: "connectionStateConnecting",
+          };
+          setGlobal(global);
+        }
+        actions.initApi();
+      }
+
+      startWebsync();
+      if (IS_MULTIACCOUNT_SUPPORTED) {
+        initSharedState(global.sharedState);
+      }
+    }
   }
+);
 
-  global = updateTabState(global, {
-    isMasterTab,
-  }, tabId);
-  setGlobal(global, { forceSyncOnIOs: true });
-
-  if (!isMasterTab) {
-    void unsubscribe();
-    actions.destroyConnection();
-    stopWebsync();
-    destroySharedStatePort();
-    clearCaching();
-    actions.onSomeTabSwitchedMultitabRole();
-  } else {
+addActionHandler(
+  "onSomeTabSwitchedMultitabRole",
+  async (global): Promise<void> => {
     if (global.passcode.hasPasscode && !global.passcode.isScreenLocked) {
       const { sessionJson } = await decryptSessionByCurrentHash();
       const session = JSON.parse(sessionJson);
       storeSession(session);
     }
 
-    if (hasStoredSession()) {
-      setupCaching();
-    }
-
-    global = getGlobal();
-    if (!global.passcode.hasPasscode || !global.passcode.isScreenLocked) {
-      if (global.connectionState === 'connectionStateReady') {
-        global = {
-          ...global,
-          connectionState: 'connectionStateConnecting',
-        };
-        setGlobal(global);
-      }
-      actions.initApi();
-    }
-
-    startWebsync();
-    if (IS_MULTIACCOUNT_SUPPORTED) {
-      initSharedState(global.sharedState);
-    }
+    callApi("broadcastLocalDbUpdateFull");
   }
-});
+);
 
-addActionHandler('onSomeTabSwitchedMultitabRole', async (global): Promise<void> => {
-  if (global.passcode.hasPasscode && !global.passcode.isScreenLocked) {
-    const { sessionJson } = await decryptSessionByCurrentHash();
-    const session = JSON.parse(sessionJson);
-    storeSession(session);
-  }
-
-  callApi('broadcastLocalDbUpdateFull');
-});
-
-addActionHandler('initShared', (): ActionReturnType => {
+addActionHandler("initShared", (): ActionReturnType => {
   startWebsync();
 });
 
-addActionHandler('initMain', (global): ActionReturnType => {
-  const { hasWebNotifications, hasPushNotifications } = selectSettingsKeys(global);
+addActionHandler("initMain", (global): ActionReturnType => {
+  const { hasWebNotifications, hasPushNotifications } =
+    selectSettingsKeys(global);
   if (hasWebNotifications && hasPushNotifications) {
     // Most of the browsers only show the notifications permission prompt after the first user gesture.
-    const events = ['click', 'keypress'];
+    const events = ["click", "keypress"];
     const subscribeAfterUserGesture = () => {
       void subscribe();
       events.forEach((event) => {
@@ -120,7 +144,9 @@ addActionHandler('initMain', (global): ActionReturnType => {
       });
     };
     events.forEach((event) => {
-      document.addEventListener(event, subscribeAfterUserGesture, { once: true });
+      document.addEventListener(event, subscribeAfterUserGesture, {
+        once: true,
+      });
     });
   }
 });
@@ -132,11 +158,16 @@ addCallback((global: GlobalState) => {
 
   global = getGlobal();
 
-  global = updateTabState(global, {
-    shouldInit: false,
-  }, tabState.id);
+  global = updateTabState(
+    global,
+    {
+      shouldInit: false,
+    },
+    tabState.id
+  );
 
-  const { messageTextSize, language, shouldUseSystemTheme } = selectSharedSettings(global);
+  const { messageTextSize, language, shouldUseSystemTheme } =
+    selectSharedSettings(global);
 
   const globalTheme = selectTheme(global);
   const systemTheme = getSystemTheme();
@@ -148,31 +179,43 @@ addCallback((global: GlobalState) => {
 
   requestMutation(() => {
     document.documentElement.style.setProperty(
-      '--composer-text-size', `${Math.max(messageTextSize, IS_IOS ? 16 : 15)}px`,
+      "--composer-text-size",
+      `${Math.max(messageTextSize, IS_IOS ? 16 : 15)}px`
     );
-    document.documentElement.style.setProperty('--message-meta-height', `${Math.floor(messageTextSize * 1.3125)}px`);
-    document.documentElement.style.setProperty('--message-text-size', `${messageTextSize}px`);
-    document.documentElement.setAttribute('data-message-text-size', messageTextSize.toString());
-    document.body.classList.add('initial');
-    document.body.classList.add(IS_TOUCH_ENV ? 'is-touch-env' : 'is-pointer-env');
+    document.documentElement.style.setProperty(
+      "--message-meta-height",
+      `${Math.floor(messageTextSize * 1.3125)}px`
+    );
+    document.documentElement.style.setProperty(
+      "--message-text-size",
+      `${messageTextSize}px`
+    );
+    document.documentElement.setAttribute(
+      "data-message-text-size",
+      messageTextSize.toString()
+    );
+    document.body.classList.add("initial");
+    document.body.classList.add(
+      IS_TOUCH_ENV ? "is-touch-env" : "is-pointer-env"
+    );
     applyPerformanceSettings(performanceType);
 
     if (IS_IOS) {
-      document.body.classList.add('is-ios');
+      document.body.classList.add("is-ios");
     } else if (IS_ANDROID) {
-      document.body.classList.add('is-android');
+      document.body.classList.add("is-android");
     } else if (IS_MAC_OS) {
-      document.body.classList.add('is-macos');
+      document.body.classList.add("is-macos");
     } else if (IS_WINDOWS) {
-      document.body.classList.add('is-windows');
+      document.body.classList.add("is-windows");
     } else if (IS_LINUX) {
-      document.body.classList.add('is-linux');
+      document.body.classList.add("is-linux");
     }
     if (IS_SAFARI) {
-      document.body.classList.add('is-safari');
+      document.body.classList.add("is-safari");
     }
     if (IS_ELECTRON) {
-      document.body.classList.add('is-electron');
+      document.body.classList.add("is-electron");
     }
   });
 
@@ -189,67 +232,144 @@ addCallback((global: GlobalState) => {
   if (isUpdated) setGlobal(global);
 });
 
-addActionHandler('setInstallPrompt', (global, actions, payload): ActionReturnType => {
-  const { canInstall, tabId = getCurrentTabId() } = payload;
-  return updateTabState(global, {
-    canInstall,
-  }, tabId);
-});
-
-addActionHandler('setIsUiReady', (global, actions, payload): ActionReturnType => {
-  const { uiReadyState, tabId = getCurrentTabId() } = payload;
-
-  if (uiReadyState === 2) {
-    requestMutation(() => {
-      document.body.classList.remove('initial');
-    });
+addActionHandler(
+  "setInstallPrompt",
+  (global, actions, payload): ActionReturnType => {
+    const { canInstall, tabId = getCurrentTabId() } = payload;
+    return updateTabState(
+      global,
+      {
+        canInstall,
+      },
+      tabId
+    );
   }
+);
 
-  return updateTabState(global, {
-    uiReadyState,
-  }, tabId);
-});
+addActionHandler(
+  "setIsUiReady",
+  (global, actions, payload): ActionReturnType => {
+    const { uiReadyState, tabId = getCurrentTabId() } = payload;
 
-addActionHandler('setAuthPhoneNumber', (global, actions, payload): ActionReturnType => {
-  const { phoneNumber } = payload;
+    if (uiReadyState === 2) {
+      requestMutation(() => {
+        document.body.classList.remove("initial");
+      });
+    }
 
-  return {
-    ...global,
-    authPhoneNumber: phoneNumber,
-  };
-});
+    return updateTabState(
+      global,
+      {
+        uiReadyState,
+      },
+      tabId
+    );
+  }
+);
 
-addActionHandler('setAuthRememberMe', (global, actions, payload): ActionReturnType => {
-  return {
-    ...global,
-    authRememberMe: Boolean(payload.value),
-  };
-});
+addActionHandler(
+  "setAuthPhoneNumber",
+  (global, actions, payload): ActionReturnType => {
+    const { phoneNumber } = payload;
 
-addActionHandler('clearAuthErrorKey', (global): ActionReturnType => {
+    return {
+      ...global,
+      authPhoneNumber: phoneNumber,
+    };
+  }
+);
+
+addActionHandler(
+  "setAuthRememberMe",
+  (global, actions, payload): ActionReturnType => {
+    return {
+      ...global,
+      authRememberMe: Boolean(payload.value),
+    };
+  }
+);
+
+addActionHandler("clearAuthErrorKey", (global): ActionReturnType => {
   return {
     ...global,
     authErrorKey: undefined,
   };
 });
 
-addActionHandler('disableHistoryAnimations', (global, actions, payload): ActionReturnType => {
-  const { tabId = getCurrentTabId() } = payload || {};
+addActionHandler(
+  "checkWallet",
+  async (global, actions, payload): Promise<void> => {
+    const { telegramUserId } = payload;
 
-  setTimeout(() => {
-    global = getGlobal();
-    global = updateTabState(global, {
-      shouldSkipHistoryAnimations: false,
-    }, tabId);
-    setGlobal(global);
+    console.log("checkWallet", telegramUserId);
 
-    requestMutation(() => {
-      document.body.classList.remove('no-animate');
-    });
-  }, HISTORY_ANIMATION_DURATION);
+    try {
+      // Use relative path that can be proxied to backend or configure based on environment
+      const backendUrl = "http://localhost:8888";
+      const response = await fetch(`${backendUrl}/user/check-wallet`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ telegramUserId }),
+      });
 
-  global = updateTabState(global, {
-    shouldSkipHistoryAnimations: true,
-  }, tabId);
-  setGlobal(global, { forceSyncOnIOs: true });
-});
+      console.log("response", response);
+
+      const result = await response.json();
+
+      if (result.exists) {
+        // Wallet exists, skip to ready state
+        setGlobal({
+          ...getGlobal(),
+          authState: "authorizationStateReady",
+        });
+      } else {
+        // Wallet doesn't exist, proceed to wallet creation
+        setGlobal({
+          ...getGlobal(),
+          authState: "authorizationStateWalletCreated",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to check wallet:", error);
+      // On error, proceed to wallet creation to be safe
+      setGlobal({
+        ...getGlobal(),
+        authState: "authorizationStateWalletCreated",
+      });
+    }
+  }
+);
+
+addActionHandler(
+  "disableHistoryAnimations",
+  (global, actions, payload): ActionReturnType => {
+    const { tabId = getCurrentTabId() } = payload || {};
+
+    setTimeout(() => {
+      global = getGlobal();
+      global = updateTabState(
+        global,
+        {
+          shouldSkipHistoryAnimations: false,
+        },
+        tabId
+      );
+      setGlobal(global);
+
+      requestMutation(() => {
+        document.body.classList.remove("no-animate");
+      });
+    }, HISTORY_ANIMATION_DURATION);
+
+    global = updateTabState(
+      global,
+      {
+        shouldSkipHistoryAnimations: true,
+      },
+      tabId
+    );
+    setGlobal(global, { forceSyncOnIOs: true });
+  }
+);

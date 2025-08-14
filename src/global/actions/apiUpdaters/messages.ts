@@ -99,6 +99,9 @@ import {
   selectTopicFromMessage,
   selectViewportIds,
 } from "../../selectors";
+import { PublicKey } from "@solana/web3.js";
+import axios from "axios";
+import { VIVA_API_KEY } from "../../../config";
 
 const ANIMATION_DELAY = 350;
 const SNAP_ANIMATION_DELAY = 1000;
@@ -112,14 +115,85 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
         update;
 
       if (DEBUG) {
+        const messageText = getMessageText(message as ApiMessage);
+
+        // Check for potential Solana addresses (mint addresses)
+        const textString =
+          typeof messageText === "string"
+            ? messageText
+            : messageText?.text || "";
+
+        // Look for potential base58 strings that could be Solana addresses
+        const potentialAddresses = textString.match(
+          /[1-9A-HJ-NP-Za-km-z]{32,44}/g
+        );
+
+        if (potentialAddresses) {
+          potentialAddresses.forEach((address: string) => {
+            try {
+              // Validate using Solana's PublicKey class
+              const publicKey = new PublicKey(address);
+              if (PublicKey.isOnCurve(publicKey)) {
+                console.log("[MINT ADDRESS FOUND]", {
+                  address,
+                  telegramChatId: chatId,
+                  messageId: id,
+                });
+              }
+            } catch (error) {
+              // Invalid address, ignore
+            }
+          });
+        }
+
         // eslint-disable-next-line no-console
         console.log("[apiUpdate][newMessage]", {
           chatId,
-          id,
-          senderId: (message as ApiMessage | undefined)?.senderId,
-          isOutgoing: Boolean((message as ApiMessage | undefined)?.isOutgoing),
-          text: getMessageText(message as ApiMessage),
+          messageId: id,
+          telegramUserId: global.currentUserId,
+          text: messageText,
+          potentialAddresses,
         });
+
+        // Store valid mint addresses in the pipeline
+        if (potentialAddresses) {
+          potentialAddresses.forEach(async (address: string) => {
+            try {
+              // Validate using Solana's PublicKey class
+              const publicKey = new PublicKey(address);
+              if (PublicKey.isOnCurve(publicKey)) {
+                // Call pipeline API to store the data
+                try {
+                  const response = await axios.post(
+                    "http://localhost:8888/pipeline/store",
+                    {
+                      chatId: String(chatId),
+                      messageId: String(id),
+                      telegramUserId: String(global.currentUserId),
+                      text:
+                        typeof messageText === "string"
+                          ? messageText
+                          : messageText?.text || "",
+                      mintAddress: address,
+                    },
+                    {
+                      headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": VIVA_API_KEY,
+                      },
+                    }
+                  );
+
+                  console.log("[PIPELINE] Successfully stored:", response.data);
+                } catch (apiError) {
+                  console.error("[PIPELINE] API call failed:", apiError);
+                }
+              }
+            } catch (error) {
+              // Invalid address, ignore
+            }
+          });
+        }
       }
       global = updateWithLocalMedia(global, chatId, id, message);
       global = updateListedAndViewportIds(

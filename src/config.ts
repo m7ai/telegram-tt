@@ -22,6 +22,7 @@ export const ACCOUNT_QUERY = "account";
 export const IS_MOCKED_CLIENT = process.env.APP_MOCKED_CLIENT === "1";
 export const IS_BYPASS_AUTH = process.env.APP_BYPASS_AUTH === "1";
 export const IS_WALLET_CREATED = process.env.APP_WALLET_CREATED === "1";
+export const IS_DEV = process.env.APP_ENV === "development";
 export const IS_TEST = process.env.APP_ENV === "test";
 export const IS_PERF = process.env.APP_ENV === "perf";
 export const IS_BETA = process.env.APP_ENV === "staging";
@@ -45,6 +46,7 @@ export const DEBUG_ALERT_MSG =
 export const DEBUG_GRAMJS = false;
 
 export const PAGE_TITLE = process.env.APP_TITLE!;
+export const VIVA_API_KEY = process.env.VIVA_API_KEY || "";
 export const INACTIVE_MARKER = "[Inactive]";
 
 export const DEBUG_PAYMENT_SMART_GLOCAL = false;

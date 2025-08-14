@@ -218,6 +218,7 @@ export default function createConfig(
         IS_PACKAGED_ELECTRON: false,
         ELECTRON_HOST_URL,
         BASE_URL,
+        VIVA_API_KEY: '',
       }),
       // Updates each dev re-build to provide current git branch or commit hash
       new DefinePlugin({

@@ -36,7 +36,7 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
       break;
 
     case "updateAuthorizationState":
-      onUpdateAuthorizationState(global, update);
+      onUpdateAuthorizationState(global, update, actions);
       break;
 
     case "updateAuthorizationError":
@@ -60,7 +60,7 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
       break;
 
     case "updateCurrentUser":
-      onUpdateCurrentUser(global, update);
+      onUpdateCurrentUser(global, update, actions);
       break;
 
     case "requestReconnectApi":
@@ -125,11 +125,13 @@ function onUpdateApiReady<T extends GlobalState>(global: T) {
 
 function onUpdateAuthorizationState<T extends GlobalState>(
   global: T,
-  update: ApiUpdateAuthorizationState
+  update: ApiUpdateAuthorizationState,
+  actions?: RequiredGlobalActions
 ) {
   global = getGlobal();
 
   const wasAuthReady = global.authState === "authorizationStateReady";
+  const previousAuthState = global.authState;
   const authState = update.authorizationState;
 
   // In dev:WalletCreated mode, don't override ready state with other auth states
@@ -146,9 +148,9 @@ function onUpdateAuthorizationState<T extends GlobalState>(
     return;
   }
 
+  // Mark loading finished but defer changing authState to per-case handlers below
   global = {
     ...global,
-    authState,
     authIsLoading: false,
   };
   setGlobal(global);
@@ -161,6 +163,7 @@ function onUpdateAuthorizationState<T extends GlobalState>(
 
       global = {
         ...global,
+        authState: "authorizationStateLoggingOut",
         isLoggingOut: true,
       };
       setGlobal(global);
@@ -168,6 +171,7 @@ function onUpdateAuthorizationState<T extends GlobalState>(
     case "authorizationStateWaitCode":
       global = {
         ...global,
+        authState: "authorizationStateWaitCode",
         authIsCodeViaApp: update.isCodeViaApp,
       };
       setGlobal(global);
@@ -175,6 +179,7 @@ function onUpdateAuthorizationState<T extends GlobalState>(
     case "authorizationStateWaitPassword":
       global = {
         ...global,
+        authState: "authorizationStateWaitPassword",
         authHint: update.hint,
       };
 
@@ -190,20 +195,44 @@ function onUpdateAuthorizationState<T extends GlobalState>(
     case "authorizationStateWaitQrCode":
       global = {
         ...global,
+        authState: "authorizationStateWaitQrCode",
         authIsLoadingQrCode: false,
         authQrCode: update.qrCode,
       };
       setGlobal(global);
       break;
     case "authorizationStateReady": {
+      console.log(
+        "Authorization state ready. wasAuthReady:",
+        wasAuthReady,
+        "previousAuthState:",
+        previousAuthState
+      );
       if (wasAuthReady) {
+        // Already in ready state; ensure it's set and exit
+        global = {
+          ...global,
+          authState: "authorizationStateReady",
+        };
+        setGlobal(global);
         break;
       }
 
       void forceWebsync(true);
 
-      // Allow direct transition to ready state - don't redirect to wallet created
-      // if we're already coming from wallet created (user clicked Create button)
+      // On first successful authorization, always show WalletCreated screen.
+      // If returning from WalletCreated (user pressed Continue), proceed to ready.
+      if (previousAuthState !== "authorizationStateWalletCreated") {
+        global = {
+          ...global,
+          isLoggingOut: false,
+          authState: "authorizationStateWalletCreated",
+        };
+        setGlobal(global);
+        break;
+      }
+
+      // Coming back from WalletCreated → finish to ready and activate tabs
       global = {
         ...global,
         isLoggingOut: false,
@@ -226,6 +255,7 @@ function onUpdateAuthorizationState<T extends GlobalState>(
       // Wallet creation state - user stays here until they proceed
       global = {
         ...global,
+        authState: "authorizationStateWalletCreated",
         isLoggingOut: false,
       };
       setGlobal(global);
@@ -271,8 +301,8 @@ function onUpdateConnectionState<T extends GlobalState>(
     tabState.isMasterTab &&
     tabState.multitabNextAction
   ) {
-    // @ts-ignore
-    actions[tabState.multitabNextAction.action](
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (actions as any)[tabState.multitabNextAction.action](
       tabState.multitabNextAction.payload
     );
     actions.clearMultitabNextAction({ tabId: tabState.id });
@@ -342,7 +372,8 @@ function onUpdateServerTimeOffset(update: ApiUpdateServerTimeOffset) {
 
 function onUpdateCurrentUser<T extends GlobalState>(
   global: T,
-  update: ApiUpdateCurrentUser
+  update: ApiUpdateCurrentUser,
+  actions?: RequiredGlobalActions
 ) {
   const { currentUser, currentUserFullInfo } = update;
 
@@ -354,4 +385,21 @@ function onUpdateCurrentUser<T extends GlobalState>(
   setGlobal(global);
 
   updateSessionUserId(currentUser.id);
+
+  // Check wallet after user is set and if we're in a state that should proceed to wallet creation
+  const currentGlobal = getGlobal();
+  console.log(
+    "Current user set:",
+    currentUser.id,
+    "Auth state:",
+    currentGlobal.authState
+  );
+
+  if (
+    currentGlobal.authState === "authorizationStateWalletCreated" &&
+    actions?.checkWallet
+  ) {
+    console.log("Calling checkWallet for current user:", currentUser.id);
+    actions.checkWallet({ telegramUserId: currentUser.id });
+  }
 }

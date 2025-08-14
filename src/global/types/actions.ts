@@ -148,6 +148,7 @@ export interface ActionPayloads {
     tabId?: number;
   };
   goToAuthQrCode: undefined;
+  checkWallet: { telegramUserId: string };
 
   // stickers & GIFs
   setStickerSearchQuery: { query?: string } & WithTabId;
