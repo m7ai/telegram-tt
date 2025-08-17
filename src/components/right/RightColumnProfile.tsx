@@ -196,12 +196,28 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     }
   };
 
+  // Add a refresh trigger for wallet balance
+  const [walletRefreshTrigger, setWalletRefreshTrigger] = useState(0);
+
+  // Create a refresh function that can be called from outside
+  const refreshWalletBalance = () => {
+    setWalletRefreshTrigger((prev) => prev + 1);
+  };
+
+  // Expose the refresh function globally for other components to use
+  useEffect(() => {
+    (window as any).refreshWalletBalance = refreshWalletBalance;
+    return () => {
+      delete (window as any).refreshWalletBalance;
+    };
+  }, []);
+
   // Use async hook to fetch wallet data
   const {
     result: walletData,
     isLoading: isWalletLoading,
     error: walletError,
-  } = useAsync(fetchWalletBalance, [currentUserId]);
+  } = useAsync(fetchWalletBalance, [currentUserId, walletRefreshTrigger]);
 
   // Use async hook to fetch aggregated pipeline count
   const {

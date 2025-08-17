@@ -305,16 +305,20 @@ export interface HMPoolTransaction {
 // M7 Token Metadata Types
 export interface M7TokenData {
   mintAddress: string;
+  price?: string;
+  liquidity?: string;
+  totalSupply?: string;
+  circulatingSupply?: string;
+  fdv?: string;
+  marketCap?: string;
   symbol?: string;
   name?: string;
   decimals?: number;
   logoUri?: string;
-  price?: number;
-  liquidity?: number;
-  marketCap?: number;
   holders?: number;
   website?: string;
   twitter?: string;
+  discord?: string;
 }
 
 export interface M7TokenMetadataResponse {
