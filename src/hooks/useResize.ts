@@ -1,16 +1,16 @@
-import type { ElementRef } from '../lib/teact/teact';
-import { useEffect, useLayoutEffect, useState } from '../lib/teact/teact';
+import type { ElementRef } from "../lib/teact/teact";
+import { useEffect, useLayoutEffect, useState } from "../lib/teact/teact";
 
-import { requestMutation } from '../lib/fasterdom/fasterdom';
-import useFlag from './useFlag';
-import useLastCallback from './useLastCallback';
+import { requestMutation } from "../lib/fasterdom/fasterdom";
+import useFlag from "./useFlag";
+import useLastCallback from "./useLastCallback";
 
 export function useResize(
   elementRef: ElementRef<HTMLElement>,
   onResize: (width: number) => void,
   onReset: NoneToVoidFunction,
   initialWidth?: number,
-  cssPropertyName?: string,
+  cssPropertyName?: string
 ) {
   const [isActive, markIsActive, unmarkIsActive] = useFlag();
   const [initialMouseX, setInitialMouseX] = useState<number>(0);
@@ -22,7 +22,7 @@ export function useResize(
         return;
       }
 
-      const widthPx = width ? `${width}px` : '';
+      const widthPx = width ? `${width}px` : "";
       elementRef.current.style.width = widthPx;
       if (cssPropertyName) {
         elementRef.current.style.setProperty(cssPropertyName, widthPx);
@@ -40,7 +40,7 @@ export function useResize(
 
   function handleMouseUp() {
     requestMutation(() => {
-      document.body.classList.remove('cursor-ew-resize');
+      document.body.classList.remove("cursor-ew-resize");
     });
   }
 
@@ -48,7 +48,7 @@ export function useResize(
     e.preventDefault();
 
     requestMutation(() => {
-      document.body.classList.add('cursor-ew-resize');
+      document.body.classList.add("cursor-ew-resize");
     });
 
     setInitialMouseX(e.clientX);
@@ -66,7 +66,9 @@ export function useResize(
     if (!isActive) return undefined;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.ceil(initialElementWidth + e.clientX - initialMouseX);
+      const newWidth = Math.ceil(
+        initialElementWidth + e.clientX - initialMouseX
+      );
       setElementStyle(newWidth);
     };
 
@@ -77,18 +79,26 @@ export function useResize(
 
     function cleanup() {
       handleMouseUp();
-      document.removeEventListener('mousemove', handleMouseMove, false);
-      document.removeEventListener('mouseup', stopDrag, false);
-      document.removeEventListener('blur', stopDrag, false);
+      document.removeEventListener("mousemove", handleMouseMove, false);
+      document.removeEventListener("mouseup", stopDrag, false);
+      document.removeEventListener("blur", stopDrag, false);
       unmarkIsActive();
     }
 
-    document.addEventListener('mousemove', handleMouseMove, false);
-    document.addEventListener('mouseup', stopDrag, false);
-    document.addEventListener('blur', stopDrag, false);
+    document.addEventListener("mousemove", handleMouseMove, false);
+    document.addEventListener("mouseup", stopDrag, false);
+    document.addEventListener("blur", stopDrag, false);
 
     return cleanup;
-  }, [initialElementWidth, initialMouseX, elementRef, onResize, isActive, unmarkIsActive, setElementStyle]);
+  }, [
+    initialElementWidth,
+    initialMouseX,
+    elementRef,
+    onResize,
+    isActive,
+    unmarkIsActive,
+    setElementStyle,
+  ]);
 
   return { initResize, resetResize, handleMouseUp };
 }

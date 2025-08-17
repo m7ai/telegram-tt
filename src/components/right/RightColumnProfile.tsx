@@ -12,8 +12,6 @@ import useLang from "../../hooks/useLang";
 import useAsync from "../../hooks/useAsync";
 import { formatNumber } from "../../util/formatNumber";
 
-import Button from "../ui/Button";
-
 import "./RightColumnProfile.scss";
 
 type OwnProps = {
