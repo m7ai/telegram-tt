@@ -94,6 +94,8 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [coinsPerPage] = useState(10);
   const [logoLoadErrors, setLogoLoadErrors] = useState<Set<string>>(new Set());
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
 
   const className = buildClassName("RightColumnProfile", isActive && "active");
 
@@ -212,6 +214,38 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     };
   }, []);
 
+  // Listen for pipeline data refresh events with rate limiting
+  useEffect(() => {
+    const handleRefreshPipelineData = () => {
+      const now = Date.now();
+      const RATE_LIMIT_MS = 5000; // 5 seconds
+
+      // Check if enough time has passed since last refresh
+      if (now - lastRefreshTime < RATE_LIMIT_MS) {
+        console.log(
+          `🔄 Refresh rate limited. Last refresh was ${Math.round(
+            (now - lastRefreshTime) / 1000
+          )}s ago, minimum interval is ${RATE_LIMIT_MS / 1000}s`
+        );
+        return;
+      }
+
+      console.log("🔄 Received refreshPipelineData event, refreshing data...");
+      setLastRefreshTime(now);
+      setRefreshTrigger((prev) => prev + 1);
+      setWalletRefreshTrigger((prev) => prev + 1);
+    };
+
+    window.addEventListener("refreshPipelineData", handleRefreshPipelineData);
+
+    return () => {
+      window.removeEventListener(
+        "refreshPipelineData",
+        handleRefreshPipelineData
+      );
+    };
+  }, [lastRefreshTime]);
+
   // Use async hook to fetch wallet data
   const {
     result: walletData,
@@ -224,7 +258,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     result: countData,
     isLoading: isCountLoading,
     error: countError,
-  } = useAsync(fetchAggregatedPipelineCount, [currentUserId]);
+  } = useAsync(fetchAggregatedPipelineCount, [currentUserId, refreshTrigger]);
 
   // Use async hook to fetch aggregated pipeline data
   const {
@@ -235,6 +269,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     currentUserId,
     currentPage,
     coinsPerPage,
+    refreshTrigger,
   ]);
 
   // Helper function to shorten wallet address

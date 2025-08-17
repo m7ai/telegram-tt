@@ -350,6 +350,7 @@ export interface ActionPayloads {
     mintAddress?: string;
   } & WithTabId;
   closeTradingColumn: WithTabId | undefined;
+  refreshPipelineData: WithTabId | undefined;
   setIsUiReady: {
     uiReadyState: 0 | 1 | 2;
   } & WithTabId;

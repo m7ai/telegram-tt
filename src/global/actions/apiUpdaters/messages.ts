@@ -176,6 +176,9 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
                   );
 
                   console.log("[PIPELINE] Successfully stored:", response.data);
+
+                  // Trigger refresh of pipeline data in the UI
+                  actions.refreshPipelineData({ tabId: getCurrentTabId() });
                 } catch (apiError) {
                   console.error("[PIPELINE] API call failed:", apiError);
                 }

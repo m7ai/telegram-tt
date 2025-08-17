@@ -131,6 +131,29 @@ addActionHandler(
 );
 
 addActionHandler(
+  "refreshPipelineData",
+  (global, actions, payload): ActionReturnType => {
+    const { tabId = getCurrentTabId() } = payload || {};
+    console.log(
+      "🔄 refreshPipelineData action handler called with tabId:",
+      tabId
+    );
+
+    // We'll trigger a custom event that components can listen for
+    // This allows us to refresh data without coupling the global state
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("refreshPipelineData", {
+          detail: { tabId },
+        })
+      );
+    }
+
+    return global;
+  }
+);
+
+addActionHandler(
   "setLeftColumnWidth",
   (global, actions, payload): ActionReturnType => {
     const { leftColumnWidth } = payload;
