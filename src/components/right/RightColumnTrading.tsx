@@ -15,8 +15,18 @@ import useHistoryBack from "../../hooks/useHistoryBack";
 import useLastCallback from "../../hooks/useLastCallback";
 
 import TVChart from "../tradingview/TVChart/TVChart";
-import type { HMPoolTokenMetadata } from "../../hooks/hellomoon/hmApi";
-import { fetchPoolTokenMetadata } from "../../hooks/hellomoon/hmApi";
+import type {
+  HMPoolTokenMetadata,
+  M7TokenMetadataResponse,
+} from "../../hooks/hellomoon/hmApi";
+import {
+  fetchPoolTokenMetadata,
+  fetchTokenMetadata,
+  buySwap,
+  sellSwap,
+  type BuySwapRequest,
+  type SellSwapRequest,
+} from "../../hooks/hellomoon/hmApi";
 
 import "./RightColumnTrading.scss";
 
@@ -40,15 +50,28 @@ interface CoinData {
 type StateProps = {
   isOpen: boolean;
   selectedCoin?: CoinData;
+  selectedMintAddress?: string;
+  currentUserId?: string;
 };
 
 const RightColumnTrading: FC<OwnProps & StateProps> = ({
   isMobile,
   isOpen,
   selectedCoin,
+  selectedMintAddress,
+  currentUserId,
 }) => {
   const { closeTradingColumn } = getActions();
   const containerRef = useRef<HTMLDivElement>(null!);
+
+  // Token metadata state
+  const [tokenMetadata, setTokenMetadata] = useState<
+    M7TokenMetadataResponse | undefined
+  >();
+  const [isLoadingTokenMetadata, setIsLoadingTokenMetadata] = useState(false);
+  const [tokenMetadataError, setTokenMetadataError] = useState<string | null>(
+    null
+  );
 
   // TVChart state and logic
   const [poolMetadata, setPoolMetadata] = useState<
@@ -62,11 +85,50 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
   const [selectedPoolTab, setSelectedPoolTab] = useState<"P1" | "P2" | "P3">(
     "P1"
   );
+  const [inputAmount, setInputAmount] = useState<string>("");
+
+  // Swap state
+  const [isSwapLoading, setIsSwapLoading] = useState(false);
+  const [lastTransactionId, setLastTransactionId] = useState<string | null>(
+    null
+  );
+
+  // Derived state for user holdings
+  const userHoldings = useMemo(() => {
+    return tokenMetadata?.userHoldings || 0;
+  }, [tokenMetadata?.userHoldings]);
+
+  // Image loading state
+  const [logoLoadError, setLogoLoadError] = useState(false);
+
+  // Fetch token metadata when mintAddress or currentUserId changes
+  useEffect(() => {
+    if (!selectedMintAddress || !currentUserId) {
+      setTokenMetadata(undefined);
+      setTokenMetadataError(null);
+      setLogoLoadError(false);
+      return;
+    }
+
+    setIsLoadingTokenMetadata(true);
+    setTokenMetadataError(null);
+
+    fetchTokenMetadata(selectedMintAddress, currentUserId)
+      .then((data) => {
+        setTokenMetadata(data);
+        setIsLoadingTokenMetadata(false);
+        setLogoLoadError(false);
+        console.log("[TokenMetadata] Successfully fetched:", data);
+      })
+      .catch((err) => {
+        console.error("[TokenMetadata] Failed to load token metadata", err);
+        setTokenMetadataError(err.message || "Failed to load token metadata");
+        setIsLoadingTokenMetadata(false);
+      });
+  }, [selectedMintAddress, currentUserId]);
 
   // Use hardcoded pool address
   const poolAddress = "0x337b56d87a6185cd46af3ac2cdf03cbc37070c30";
-
-  console.log("poolMetadata", poolMetadata);
 
   useEffect(() => {
     if (!poolAddress) return;
@@ -77,7 +139,6 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
 
     fetchPoolTokenMetadata(poolAddress)
       .then((data) => {
-        console.log("[TVChart] Pool metadata loaded:", data);
         setPoolMetadata(data);
         setIsLoadingChart(false);
       })
@@ -102,6 +163,131 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     closeTradingColumn();
   });
 
+  const handleInputAmountChange = useLastCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      // Allow only valid number inputs
+      if (value === "" || /^\d*\.?\d*$/.test(value)) {
+        setInputAmount(value);
+      }
+    }
+  );
+
+  const handleInputButtonClick = useLastCallback((amount: string) => {
+    setInputAmount(amount);
+  });
+
+  const handlePercentageClick = useLastCallback((percentage: number) => {
+    if (userHoldings <= 0) {
+      console.warn("No holdings available for percentage calculation");
+      setInputAmount("0");
+      return;
+    }
+
+    const calculatedAmount = (userHoldings * percentage) / 100;
+    setInputAmount(calculatedAmount.toString());
+  });
+
+  const handleCloseTransaction = useLastCallback(() => {
+    setLastTransactionId(null);
+  });
+
+  const handleBuySwap = useLastCallback(async () => {
+    if (!currentUserId || !selectedMintAddress) {
+      console.error("Missing required data for buy swap:", {
+        currentUserId,
+        selectedMintAddress,
+      });
+      return;
+    }
+
+    const amount = parseFloat(inputAmount);
+    if (isNaN(amount) || amount <= 0) {
+      console.error("Invalid input amount:", inputAmount);
+      return;
+    }
+
+    // Clear previous transaction and start loading
+    setLastTransactionId(null);
+    setIsSwapLoading(true);
+
+    try {
+      const swapRequest: BuySwapRequest = {
+        telegramUserId: currentUserId,
+        inputAmount: amount,
+        outputMintAddress: selectedMintAddress,
+      };
+
+      console.log("Executing buy swap:", swapRequest);
+      const result = await buySwap(swapRequest);
+      console.log("Buy swap successful:", result);
+
+      // Store the transaction ID for display
+      setLastTransactionId(result.transactionId);
+
+      // You could add success notification here
+      // showNotification({ message: `Swap successful! Transaction: ${result.transactionId}` });
+    } catch (error) {
+      console.error("Buy swap failed:", error);
+      // You could add error notification here
+      // showNotification({ message: `Swap failed: ${error.message}` });
+    } finally {
+      setIsSwapLoading(false);
+    }
+  });
+
+  const handleSellSwap = useLastCallback(async () => {
+    if (!currentUserId || !selectedMintAddress) {
+      console.error("Missing required data for sell swap:", {
+        currentUserId,
+        selectedMintAddress,
+      });
+      return;
+    }
+
+    const amount = parseFloat(inputAmount);
+    if (isNaN(amount) || amount <= 0) {
+      console.error("Invalid input amount:", inputAmount);
+      return;
+    }
+
+    // Clear previous transaction and start loading
+    setLastTransactionId(null);
+    setIsSwapLoading(true);
+
+    try {
+      const swapRequest: SellSwapRequest = {
+        telegramUserId: currentUserId,
+        inputAmount: amount,
+        inputMintAddress: selectedMintAddress,
+      };
+
+      console.log("Executing sell swap:", swapRequest);
+      const result = await sellSwap(swapRequest);
+      console.log("Sell swap successful:", result);
+
+      // Store the transaction ID for display
+      setLastTransactionId(result.transactionId);
+
+      // You could add success notification here
+      // showNotification({ message: `Swap successful! Transaction: ${result.transactionId}` });
+    } catch (error) {
+      console.error("Sell swap failed:", error);
+      // You could add error notification here
+      // showNotification({ message: `Swap failed: ${error.message}` });
+    } finally {
+      setIsSwapLoading(false);
+    }
+  });
+
+  const handleSwap = useLastCallback(async () => {
+    if (tradeType === "buy") {
+      await handleBuySwap();
+    } else {
+      await handleSellSwap();
+    }
+  });
+
   // Handle ESC key
   useHistoryBack({
     isActive: isOpen,
@@ -121,129 +307,196 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
       className="RightColumnTrading"
       id="RightColumnTrading"
     >
-      {selectedCoin && (
+      {(selectedCoin || tokenMetadata) && (
         <div className="trading-content">
           <div className="coin-item trading-header">
-            {/* Top row: Avatar, Name with copy icon, Time, and Metrics */}
-            <div className="coin-top-row">
-              <div className="coin-left">
-                <div className="coin-avatar" />
-                <div className="coin-content">
-                  <div className="coin-info">
-                    <span className="coin-name">{selectedCoin.name}</span>
-                    <svg
-                      className="coin-copy-icon"
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <rect
-                        x="9"
-                        y="9"
-                        width="13"
-                        height="13"
-                        rx="2"
-                        ry="2"
-                      ></rect>
-                      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
-                    </svg>
-                    <span className="coin-time">{selectedCoin.time}</span>
+            {/* Loading State */}
+            {isLoadingTokenMetadata && (
+              <div className="token-loading-state">
+                Loading token metadata...
+              </div>
+            )}
+
+            {/* Error State */}
+            {tokenMetadataError && (
+              <div className="token-error-state">
+                Error: {tokenMetadataError}
+              </div>
+            )}
+
+            {/* Token Data */}
+            {!isLoadingTokenMetadata &&
+              !tokenMetadataError &&
+              (tokenMetadata?.found || selectedCoin) && (
+                <>
+                  {/* Top row: Avatar, Name with copy icon, Time, and Metrics */}
+                  <div className="coin-top-row">
+                    <div className="coin-left">
+                      <div className="coin-avatar">
+                        {tokenMetadata?.tokenData?.logoUri && !logoLoadError ? (
+                          <img
+                            src={tokenMetadata.tokenData.logoUri}
+                            alt="Token logo"
+                            className="token-logo"
+                            width="24"
+                            height="24"
+                            onError={() => {
+                              setLogoLoadError(true);
+                            }}
+                          />
+                        ) : null}
+                      </div>
+                      <div className="coin-content">
+                        <div className="coin-info">
+                          <span className="coin-name">
+                            {tokenMetadata?.tokenData?.name ||
+                              tokenMetadata?.tokenData?.symbol ||
+                              selectedCoin?.name ||
+                              "Unknown Token"}
+                          </span>
+                          <svg
+                            className="coin-copy-icon"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <rect
+                              x="9"
+                              y="9"
+                              width="13"
+                              height="13"
+                              rx="2"
+                              ry="2"
+                            ></rect>
+                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="coin-metrics-and-close">
+                      <button
+                        type="button"
+                        className="trading-close-button"
+                        onClick={handleClose}
+                        aria-label="Close"
+                      >
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                  <div className="coin-subtitle-row">
-                    <p className="coin-subtitle">{selectedCoin.subtitle}</p>
+
+                  {/* Bottom row: Stats */}
+                  <div className="coin-stats-row">
+                    <div className="stat-item left-aligned">
+                      <img
+                        src="/svg/liq.svg"
+                        alt="liquidity"
+                        className="stat-icon"
+                        width="11"
+                        height="10"
+                      />
+                      <span className="stat-value">
+                        {tokenMetadata?.tokenData?.liquidity?.toLocaleString() ||
+                          selectedCoin?.cap ||
+                          "N/A"}
+                      </span>
+                    </div>
+
+                    <div className="stats-right-group">
+                      <div className="stat-item">
+                        <img
+                          src="/svg/people.svg"
+                          alt="people"
+                          className="stat-icon"
+                          width="11"
+                          height="10"
+                        />
+                        <span className="stat-value">
+                          {tokenMetadata?.tokenData?.holders?.toLocaleString() ||
+                            selectedCoin?.holders?.toLocaleString() ||
+                            "N/A"}
+                        </span>
+                      </div>
+                      <span className="stat-separator">|</span>
+                      <div className="stat-item">
+                        $
+                        <span className="stat-value">
+                          {tokenMetadata?.tokenData?.price?.toFixed(6) ||
+                            selectedCoin?.score ||
+                            "N/A"}
+                        </span>
+                      </div>
+                      <span className="stat-separator">|</span>
+                      {/* <div className="stat-item">
+                        <img
+                          src="/svg/chart.svg"
+                          alt="volume"
+                          className="stat-icon"
+                          width="11"
+                          height="10"
+                        />
+                        <span className="stat-value">
+                          {tokenMetadata?.tokenData?.marketCap?.toLocaleString() ||
+                            selectedCoin?.volume ||
+                            "N/A"}
+                        </span>
+                      </div> */}
+                      <span className="stat-separator">|</span>
+                      <div className="stat-item mc-group">
+                        <span className="stat-value">MC</span>
+                        <img
+                          src="/svg/mc.svg"
+                          alt="market cap"
+                          className="stat-icon"
+                          width="11"
+                          height="10"
+                        />
+                        <span className="stat-value change-value">
+                          {tokenMetadata?.tokenData?.marketCap?.toLocaleString() ||
+                            selectedCoin?.change ||
+                            "N/A"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              <div className="coin-metrics-and-close">
-                <button
-                  type="button"
-                  className="trading-close-button"
-                  onClick={handleClose}
-                  aria-label="Close"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            {/* Bottom row: Stats */}
-            <div className="coin-stats-row">
-              <div className="stat-item left-aligned">
-                <img
-                  src="/svg/liq.svg"
-                  alt="liquidity"
-                  className="stat-icon"
-                  width="11"
-                  height="10"
-                />
-                <span className="stat-value">{selectedCoin.cap}</span>
-              </div>
-
-              <div className="stats-right-group">
-                <div className="stat-item">
-                  <img
-                    src="/svg/people.svg"
-                    alt="people"
-                    className="stat-icon"
-                    width="11"
-                    height="10"
-                  />
-                  <span className="stat-value">
-                    {selectedCoin.holders.toLocaleString()}
-                  </span>
-                </div>
-                <span className="stat-separator">|</span>
-                <div className="stat-item">
-                  <img
-                    src="/svg/wallet.svg"
-                    alt="people"
-                    className="stat-icon"
-                    width="11"
-                    height="10"
-                  />
-                  <span className="stat-value">{selectedCoin.score}</span>
-                </div>
-                <span className="stat-separator">|</span>
-                <div className="stat-item">
-                  <img
-                    src="/svg/chart.svg"
-                    alt="volume"
-                    className="stat-icon"
-                    width="11"
-                    height="10"
-                  />
-                  <span className="stat-value">{selectedCoin.volume}</span>
-                </div>
-                <span className="stat-separator">|</span>
-                <div className="stat-item mc-group">
-                  <span className="stat-value">MC</span>
-                  <img
-                    src="/svg/mc.svg"
-                    alt="volume"
-                    className="stat-icon"
-                    width="11"
-                    height="10"
-                  />
-                  <span className="stat-value change-value">
-                    {selectedCoin.change}
-                  </span>
-                </div>
-              </div>
-            </div>
+                  {/* User Holdings Row */}
+                  {tokenMetadata?.userHoldings !== undefined && (
+                    <div className="user-holdings-row">
+                      <div className="holdings-item">
+                        <img
+                          src="/svg/wallet.svg"
+                          alt="holdings"
+                          className="stat-icon"
+                          width="11"
+                          height="10"
+                        />
+                        <span className="holdings-label">Your Holdings:</span>
+                        <span className="holdings-value">
+                          {tokenMetadata.userHoldings.toLocaleString()}
+                        </span>
+                        <span className="holdings-symbol">
+                          {tokenMetadata?.tokenData?.symbol || "tokens"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
           </div>
 
           {/* TVChart Component */}
@@ -291,6 +544,8 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                       type="number"
                       placeholder="0.00"
                       className="amount-input"
+                      value={inputAmount}
+                      onChange={handleInputAmountChange}
                     />
                     <svg
                       className="solana-icon"
@@ -314,52 +569,188 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                       />
                     </svg>
                   </div>
-                  <div className="percentage-buttons">
-                    <button className="percentage-button">0.01</button>
-                    <button className="percentage-button">0.01</button>
-                    <button className="percentage-button">0.5</button>
-                    <button className="percentage-button">1</button>
-                    <button className="percentage-button edit-button">
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
+                  {tradeType === "buy" ? (
+                    <div className="percentage-buttons">
+                      <button
+                        className="input-button"
+                        onClick={() => handleInputButtonClick("0.001")}
                       >
-                        <path
-                          d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <path
-                          d="m18.5 2.5 a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
-                  </div>
+                        0.001
+                      </button>
+                      <button
+                        className="input-button"
+                        onClick={() => handleInputButtonClick("0.1")}
+                      >
+                        0.1
+                      </button>
+                      <button
+                        className="input-button"
+                        onClick={() => handleInputButtonClick("0.5")}
+                      >
+                        0.5
+                      </button>
+                      <button
+                        className="input-button"
+                        onClick={() => handleInputButtonClick("1")}
+                      >
+                        1
+                      </button>
+                      <button className="input-button edit-button">
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="m18.5 2.5 a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="percentage-buttons">
+                      <button
+                        className="input-button"
+                        onClick={() => handlePercentageClick(10)}
+                      >
+                        10%
+                      </button>
+                      <button
+                        className="input-button"
+                        onClick={() => handlePercentageClick(25)}
+                      >
+                        25%
+                      </button>
+                      <button
+                        className="input-button"
+                        onClick={() => handlePercentageClick(50)}
+                      >
+                        50%
+                      </button>
+                      <button
+                        className="input-button"
+                        onClick={() => handlePercentageClick(100)}
+                      >
+                        100%
+                      </button>
+                    </div>
+                  )}
+
+                  {tradeType === "sell" && (
+                    <div className="holdings-info">
+                      <span className="holdings-label">Holdings:</span>
+                      <span className="holdings-amount">
+                        {userHoldings.toLocaleString()}{" "}
+                        {tokenMetadata?.tokenData?.symbol || "tokens"}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
-                <button className="buy-now-button">
-                  <svg
-                    className="buy-now-icon"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                  </svg>
-                  Buy now
+                <button
+                  className={`buy-now-button ${isSwapLoading ? "loading" : ""}`}
+                  onClick={handleSwap}
+                  disabled={isSwapLoading}
+                >
+                  {isSwapLoading ? (
+                    <>
+                      <svg
+                        className="loading-spinner"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M21 12a9 9 0 11-6.219-8.56" />
+                      </svg>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="buy-now-icon"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                      </svg>
+                      {tradeType === "buy" ? "Buy now" : "Sell now"}
+                    </>
+                  )}
                 </button>
+
+                {lastTransactionId && (
+                  <div className="transaction-result">
+                    <div className="transaction-header">
+                      <div className="transaction-success">
+                        Swap successful!
+                      </div>
+                      <button
+                        className="close-transaction-button"
+                        onClick={handleCloseTransaction}
+                        title="Close"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="transaction-id">
+                      <span className="transaction-label">Transaction ID:</span>
+                      <span className="transaction-hash">
+                        {lastTransactionId.slice(0, 8)}...
+                        {lastTransactionId.slice(-8)}
+                      </span>
+                      <a
+                        className="solscan-link"
+                        href={`https://solscan.io/tx/${lastTransactionId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View transaction on Solscan"
+                      >
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                          <polyline points="15,3 21,3 21,9"></polyline>
+                          <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
+                      </a>
+                    </div>
+                  </div>
+                )}
 
                 <div className="trade-stats">
                   <div className="trade-stat">
@@ -494,6 +885,8 @@ export default memo(
     return {
       isOpen: Boolean(tabState.isTradingColumnShown),
       selectedCoin: tabState.selectedTradingCoin,
+      selectedMintAddress: tabState.selectedTradingMintAddress,
+      currentUserId: global.currentUserId,
     };
   })(RightColumnTrading)
 );

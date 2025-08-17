@@ -136,6 +136,7 @@ export type TabState = {
     volume: string;
     change: string;
   };
+  selectedTradingMintAddress?: string;
   nextProfileTab?: ProfileTabType;
   forceScrollProfileTab?: boolean;
   nextFoldersAction?: ReducerAction<FoldersActions>;

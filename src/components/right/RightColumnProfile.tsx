@@ -9,83 +9,12 @@ import { selectTabState } from "../../global/selectors/tabs";
 import buildClassName from "../../util/buildClassName";
 
 import useLang from "../../hooks/useLang";
+import useAsync from "../../hooks/useAsync";
+import { formatNumber } from "../../util/formatNumber";
 
 import Button from "../ui/Button";
 
 import "./RightColumnProfile.scss";
-
-const coins = [
-  {
-    id: "cwypto",
-    name: "CWYPTO",
-    subtitle: "Itsa mee cwypto",
-    time: "5m",
-    hasNotification: true,
-    comments: 105,
-    score: 1238,
-    cap: "$250K",
-    holders: 2430,
-    holdersIcon: "👥",
-    volume: 89,
-    volumeIcon: "📊",
-    marketCap: "$155K",
-    change: "$1.2M",
-    changeIcon: "↗",
-  },
-  {
-    id: "zelenskiii",
-    name: "Zelenskiii",
-    subtitle: "Memecoin leader",
-    time: "6m",
-    hasNotification: false,
-    comments: 23,
-    score: 850,
-    cap: "$250K",
-    holders: 2430,
-    holdersIcon: "👥",
-    volume: 89,
-    volumeIcon: "📊",
-    marketCap: "$155K",
-    change: "$1.2M",
-    changeIcon: "↗",
-  },
-  {
-    id: "alien",
-    name: "Alien",
-    subtitle: "The alien emoji",
-    time: "5m",
-    hasNotification: false,
-    comments: 14,
-    score: 620,
-    cap: "$250K",
-    holders: 2430,
-    holdersIcon: "👥",
-    volume: 89,
-    volumeIcon: "📊",
-    marketCap: "$155K",
-    change: "$1.2M",
-    changeIcon: "↗",
-  },
-  {
-    id: "hippy",
-    name: "Hippy",
-    subtitle: "Peace-loving Solana",
-    time: "5m",
-    hasNotification: false,
-    comments: 8,
-    score: 180,
-    cap: "$250K",
-    holders: 2430,
-    holdersIcon: "👥",
-    volume: 89,
-    volumeIcon: "📊",
-    marketCap: "$155K",
-    change: "$1.2M",
-    changeIcon: "↗",
-  },
-];
-
-const shortAddress = "0x2a5dd...5C49";
 
 type OwnProps = {
   isActive: boolean;
@@ -95,6 +24,60 @@ type OwnProps = {
 type StateProps = {
   currentUser?: ApiUser;
   isTradingColumnShown?: boolean;
+  currentUserId?: string;
+};
+
+type WalletData = {
+  walletAddress: string;
+  balance: number;
+  balanceLamports: number;
+  telegramUserId: string;
+  message: string;
+};
+
+type TokenData = {
+  mintAddress: string;
+  symbol?: string;
+  name?: string;
+  decimals?: number;
+  logoUri?: string;
+  price?: string;
+  liquidity?: string;
+  marketCap?: string;
+  holders?: number;
+  website?: string;
+  twitter?: string;
+};
+
+type AggregatedPipelineItem = {
+  id: string;
+  mintAddress: string;
+  activeCount: number;
+  createdAt: string;
+  lastModifiedAt: string;
+  tokenData?: TokenData;
+};
+
+type PaginationMeta = {
+  currentPage: number;
+  limit: number;
+  totalItems: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+};
+
+type AggregatedPipelineResponse = {
+  telegramUserId: string;
+  data: AggregatedPipelineItem[];
+  pagination: PaginationMeta;
+  message: string;
+};
+
+type AggregatedPipelineCountResponse = {
+  telegramUserId: string;
+  count: number;
+  message: string;
 };
 
 const RightColumnProfile: FC<OwnProps & StateProps> = ({
@@ -102,34 +85,179 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
   onClose,
   currentUser,
   isTradingColumnShown,
+  currentUserId,
 }) => {
   const { openTradingColumn } = getActions();
   const lang = useLang();
   const [isCoinsExpanded, setIsCoinsExpanded] = useState(true);
   const [selectedCoinId, setSelectedCoinId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [coinsPerPage] = useState(10);
+  const [logoLoadErrors, setLogoLoadErrors] = useState<Set<string>>(new Set());
 
   const className = buildClassName("RightColumnProfile", isActive && "active");
+
+  // Fetch wallet balance function
+  const fetchWalletBalance = async (): Promise<WalletData | undefined> => {
+    if (!currentUserId) {
+      return undefined;
+    }
+
+    try {
+      const response = await fetch("http://localhost:8888/user/get-balance", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          telegramUserId: currentUserId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Failed to fetch wallet balance:", error);
+      throw error;
+    }
+  };
+
+  // Fetch aggregated pipeline count function
+  const fetchAggregatedPipelineCount = async (): Promise<
+    AggregatedPipelineCountResponse | undefined
+  > => {
+    if (!currentUserId) {
+      return undefined;
+    }
+
+    try {
+      const response = await fetch(
+        "http://localhost:8888/user/get-aggregated-pipeline-count",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            telegramUserId: currentUserId,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Failed to fetch aggregated pipeline count:", error);
+      throw error;
+    }
+  };
+
+  // Fetch aggregated pipeline data function
+  const fetchAggregatedPipelineData = async (): Promise<
+    AggregatedPipelineResponse | undefined
+  > => {
+    if (!currentUserId) {
+      return undefined;
+    }
+
+    try {
+      const response = await fetch(
+        "http://localhost:8888/user/get-aggregated-pipeline",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            telegramUserId: currentUserId,
+            page: currentPage,
+            limit: coinsPerPage,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Failed to fetch aggregated pipeline data:", error);
+      throw error;
+    }
+  };
+
+  // Use async hook to fetch wallet data
+  const {
+    result: walletData,
+    isLoading: isWalletLoading,
+    error: walletError,
+  } = useAsync(fetchWalletBalance, [currentUserId]);
+
+  // Use async hook to fetch aggregated pipeline count
+  const {
+    result: countData,
+    isLoading: isCountLoading,
+    error: countError,
+  } = useAsync(fetchAggregatedPipelineCount, [currentUserId]);
+
+  // Use async hook to fetch aggregated pipeline data
+  const {
+    result: pipelineData,
+    isLoading: isPipelineLoading,
+    error: pipelineError,
+  } = useAsync(fetchAggregatedPipelineData, [
+    currentUserId,
+    currentPage,
+    coinsPerPage,
+  ]);
+
+  // Helper function to shorten wallet address
+  const shortenAddress = (address: string) => {
+    if (!address) return "";
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  // Get display values
+  const displayAddress = walletData?.walletAddress || "";
+  const shortAddress = shortenAddress(displayAddress);
+  const displayBalance = formatNumber(walletData?.balance);
 
   const toggleCoinsVisibility = () => {
     setIsCoinsExpanded(!isCoinsExpanded);
   };
 
-  const handleCoinClick = (coin: (typeof coins)[0]) => {
-    setSelectedCoinId(coin.id);
+  const handleCoinClick = (item: AggregatedPipelineItem) => {
+    setSelectedCoinId(item.id);
+
+    const coinData = {
+      id: item.id,
+      name: item.tokenData?.name || item.tokenData?.symbol || "Unknown Token",
+      subtitle: `Mint: ${item.mintAddress.slice(0, 8)}...`,
+      time: "Active",
+      comments: formatNumber(item.activeCount),
+      score: formatNumber(item.activeCount),
+      cap: formatNumber(item.tokenData?.liquidity),
+      holders: item.tokenData?.holders || 0,
+      volume: formatNumber(item.tokenData?.marketCap),
+      change: formatNumber(item.tokenData?.price),
+    };
+
     openTradingColumn({
-      coin: {
-        id: coin.id,
-        name: coin.name,
-        subtitle: coin.subtitle,
-        time: coin.time,
-        comments: coin.comments.toString(),
-        score: coin.score.toString(),
-        cap: coin.cap,
-        holders: coin.holders,
-        volume: coin.volume.toString(),
-        change: coin.change,
-      },
+      coin: coinData,
+      mintAddress: item.mintAddress,
     });
+
+    console.log("✅ openTradingColumn action dispatched");
   };
 
   // Deselect coin when trading column closes
@@ -151,10 +279,27 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
           <div className="wallet-column">
             <span className="wallet-label">Wallet address</span>
             <div className="wallet-value-group">
-              <span className="wallet-address" title={shortAddress}>
-                {shortAddress}
-              </span>
-              <button className="copy-button" aria-label="Copy wallet address">
+              {isWalletLoading ? (
+                <span className="wallet-address loading">Loading...</span>
+              ) : walletError ? (
+                <span className="wallet-address error">
+                  Error loading wallet
+                </span>
+              ) : (
+                <span className="wallet-address" title={displayAddress}>
+                  {shortAddress || "No wallet found"}
+                </span>
+              )}
+              <button
+                className="copy-button"
+                aria-label="Copy wallet address"
+                onClick={() => {
+                  if (displayAddress) {
+                    navigator.clipboard.writeText(displayAddress);
+                  }
+                }}
+                disabled={!displayAddress}
+              >
                 <svg
                   className="copy-icon"
                   width="16"
@@ -173,7 +318,13 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
           <div className="balance-column">
             <span className="balance-label">Balance</span>
             <div className="balance-value-group">
-              <span className="balance-amount">12.5433</span>
+              {isWalletLoading ? (
+                <span className="balance-amount loading">Loading...</span>
+              ) : walletError ? (
+                <span className="balance-amount error">Error</span>
+              ) : (
+                <span className="balance-amount">{displayBalance}</span>
+              )}
               <img
                 className="balance-icon"
                 src="/solana/Solana (SOL).svg"
@@ -212,7 +363,15 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
 
         <div className="coins-group">
           <div className="group-label" onClick={toggleCoinsVisibility}>
-            <span>Scanned coins (6)</span>
+            <span>
+              Scanned coins (
+              {isCountLoading
+                ? "..."
+                : countError
+                ? "0"
+                : countData?.count || 0}
+              )
+            </span>
             <svg
               className={buildClassName(
                 "chevron-icon",
@@ -230,142 +389,210 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
           </div>
           {isCoinsExpanded && (
             <div className="coins-content">
-              <div className="coins-list">
-                {coins.map((coin) => (
-                  <div
-                    key={coin.id}
-                    className={buildClassName(
-                      "coin-item",
-                      "clickable",
-                      selectedCoinId === coin.id && "selected"
-                    )}
-                    onClick={() => handleCoinClick(coin)}
-                  >
-                    {/* Top row: Avatar, Name with copy icon, Time, and Metrics */}
-                    <div className="coin-top-row">
-                      <div className="coin-left">
-                        <div className="coin-avatar" />
-                        <div className="coin-content">
-                          <div className="coin-info">
-                            <span className="coin-name">{coin.name}</span>
-                            <svg
-                              className="coin-copy-icon"
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <rect
-                                x="9"
-                                y="9"
-                                width="13"
-                                height="13"
-                                rx="2"
-                                ry="2"
-                              ></rect>
-                              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
-                            </svg>
-                            <span className="coin-time">{coin.time}</span>
+              {isPipelineLoading ? (
+                <div className="loading-state">Loading scanned coins...</div>
+              ) : pipelineError ? (
+                <div className="error-state">Error loading coins</div>
+              ) : !pipelineData?.data?.length ? (
+                <div className="empty-state">No scanned coins found</div>
+              ) : (
+                <>
+                  <div className="coins-list">
+                    {pipelineData.data.map((item) => (
+                      <div
+                        key={item.id}
+                        className={buildClassName(
+                          "coin-item",
+                          "clickable",
+                          selectedCoinId === item.id && "selected"
+                        )}
+                        onClick={() => handleCoinClick(item)}
+                      >
+                        {/* Top row: Avatar, Name with copy icon, Time, and Metrics */}
+                        <div className="coin-top-row">
+                          <div className="coin-left">
+                            <div className="">
+                              {item.tokenData?.logoUri &&
+                              !logoLoadErrors.has(item.id) ? (
+                                <img
+                                  src={item.tokenData.logoUri}
+                                  alt="Token logo"
+                                  className="token-logo"
+                                  width="24"
+                                  height="24"
+                                  onError={() => {
+                                    setLogoLoadErrors((prev) =>
+                                      new Set(prev).add(item.id)
+                                    );
+                                  }}
+                                />
+                              ) : (
+                                <div className="coin-avatar" />
+                              )}
+                            </div>
+                            <div className="coin-content">
+                              <div className="coin-info">
+                                <span className="coin-name">
+                                  {item.tokenData?.name ||
+                                    item.tokenData?.symbol ||
+                                    "Unknown Token"}
+                                </span>
+                                <svg
+                                  className="coin-copy-icon"
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(
+                                      item.mintAddress
+                                    );
+                                  }}
+                                >
+                                  <rect
+                                    x="9"
+                                    y="9"
+                                    width="13"
+                                    height="13"
+                                    rx="2"
+                                    ry="2"
+                                  ></rect>
+                                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                                </svg>
+                              </div>
+                              <div className="coin-subtitle-row">
+                                <p className="coin-subtitle">
+                                  {item.mintAddress.slice(0, 8)}...
+                                  {item.mintAddress.slice(-4)}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="coin-subtitle-row">
-                            <p className="coin-subtitle">{coin.subtitle}</p>
+
+                          <div className="coin-metrics">
+                            <div className="metric-badge">
+                              <img
+                                src="/svg/chat.svg"
+                                alt="chat"
+                                className="message-icon"
+                                width="14"
+                                height="14"
+                              />
+                              <span className="metric-value">
+                                {formatNumber(item.activeCount)}
+                              </span>
+                            </div>
+                            {/* <div className="metric-badge">
+                              <img
+                                src="/svg/radar.svg"
+                                alt="radar"
+                                className="sparkles-icon"
+                                width="14"
+                                height="14"
+                              />
+                              <span className="metric-value">
+                                {formatNumber(item.activeCount)}
+                              </span>
+                            </div> */}
+                          </div>
+                        </div>
+
+                        {/* Bottom row: Stats */}
+                        <div className="coin-stats-row">
+                          <div className="stat-item left-aligned">
+                            <img
+                              src="/svg/liq.svg"
+                              alt="liquidity"
+                              className="stat-icon"
+                              width="11"
+                              height="10"
+                            />
+                            <span className="stat-value">
+                              {formatNumber(item.tokenData?.liquidity)}
+                            </span>
+                          </div>
+
+                          <div className="stats-right-group">
+                            <div className="stat-item">
+                              <img
+                                src="/svg/people.svg"
+                                alt="people"
+                                className="stat-icon"
+                                width="11"
+                                height="10"
+                              />
+                              <span className="stat-value">
+                                {formatNumber(item.tokenData?.holders)}
+                              </span>
+                            </div>
+                            <span className="stat-separator">|</span>
+                            <div className="stat-item">
+                              <span className="stat-value">$</span>
+                              <span className="stat-value change-value">
+                                {formatNumber(item.tokenData?.price)}
+                              </span>
+                            </div>
+                            {/* <span className="stat-separator">|</span>
+                            <div className="stat-item">
+                              <img
+                                src="/svg/chart.svg"
+                                alt="volume"
+                                className="stat-icon"
+                                width="11"
+                                height="10"
+                              />
+                              <span className="stat-value">
+                                {formatNumber(item.tokenData?.marketCap)}
+                              </span>
+                            </div> */}
+                            <span className="stat-separator">|</span>
+                            <div className="stat-item mc-group">
+                              <span className="stat-value">MC</span>
+                              <img
+                                src="/svg/mc.svg"
+                                alt="market cap"
+                                className="stat-icon"
+                                width="11"
+                                height="10"
+                              />
+                              <span className="stat-value change-value">
+                                {formatNumber(item.tokenData?.marketCap)}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
-
-                      <div className="coin-metrics">
-                        <div className="metric-badge">
-                          <img
-                            src="/svg/chat.svg"
-                            alt="chat"
-                            className="message-icon"
-                            width="14"
-                            height="14"
-                          />
-                          <span className="metric-value">{coin.comments}</span>
-                        </div>
-                        <div className="metric-badge">
-                          <img
-                            src="/svg/radar.svg"
-                            alt="radar"
-                            className="sparkles-icon"
-                            width="14"
-                            height="14"
-                          />
-                          <span className="metric-value">{coin.score}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Bottom row: Stats */}
-                    <div className="coin-stats-row">
-                      <div className="stat-item left-aligned">
-                        <img
-                          src="/svg/liq.svg"
-                          alt="liquidity"
-                          className="stat-icon"
-                          width="11"
-                          height="10"
-                        />
-                        <span className="stat-value">{coin.cap}</span>
-                      </div>
-
-                      <div className="stats-right-group">
-                        <div className="stat-item">
-                          <img
-                            src="/svg/people.svg"
-                            alt="people"
-                            className="stat-icon"
-                            width="11"
-                            height="10"
-                          />
-                          <span className="stat-value">
-                            {coin.holders.toLocaleString()}
-                          </span>
-                        </div>
-                        <span className="stat-separator">|</span>
-                        <div className="stat-item">
-                          <img
-                            src="/svg/wallet.svg"
-                            alt="people"
-                            className="stat-icon"
-                            width="11"
-                            height="10"
-                          />
-                          <span className="stat-value">{coin.score}</span>
-                        </div>
-                        <span className="stat-separator">|</span>
-                        <div className="stat-item">
-                          <img
-                            src="/svg/chart.svg"
-                            alt="volume"
-                            className="stat-icon"
-                            width="11"
-                            height="10"
-                          />
-                          <span className="stat-value">{coin.volume}</span>
-                        </div>
-                        <span className="stat-separator">|</span>
-                        <div className="stat-item mc-group">
-                          <span className="stat-value">MC</span>
-                          <img
-                            src="/svg/mc.svg"
-                            alt="volume"
-                            className="stat-icon"
-                            width="11"
-                            height="10"
-                          />
-                          <span className="stat-value change-value">
-                            {coin.change}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+
+                  {/* Pagination Controls */}
+                  {pipelineData.pagination.totalPages > 1 && (
+                    <div className="pagination-controls">
+                      <button
+                        className="pagination-button"
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={!pipelineData.pagination.hasPrevious}
+                      >
+                        Previous
+                      </button>
+                      <span className="pagination-info">
+                        Page {pipelineData.pagination.currentPage} of{" "}
+                        {pipelineData.pagination.totalPages}
+                      </span>
+                      <button
+                        className="pagination-button"
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={!pipelineData.pagination.hasNext}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -437,6 +664,7 @@ export default memo(
 
     return {
       currentUser,
+      currentUserId: global.currentUserId,
       isTradingColumnShown: tabState.isTradingColumnShown,
     };
   })(RightColumnProfile)

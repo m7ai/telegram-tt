@@ -347,6 +347,7 @@ export interface ActionPayloads {
       volume: string;
       change: string;
     };
+    mintAddress?: string;
   } & WithTabId;
   closeTradingColumn: WithTabId | undefined;
   setIsUiReady: {

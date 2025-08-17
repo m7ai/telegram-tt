@@ -299,45 +299,116 @@ addActionHandler("clearAuthErrorKey", (global): ActionReturnType => {
 addActionHandler(
   "checkWallet",
   async (global, actions, payload): Promise<void> => {
+    console.log("checkWallet", payload);
     const { telegramUserId } = payload;
 
-    console.log("checkWallet", telegramUserId);
+    // Check if we're in the WalletCreated development environment
+    const isWalletCreatedEnv = process.env.APP_WALLET_CREATED === "1";
+    const telegramUserIdTest = "8214814881";
 
     try {
       // Use relative path that can be proxied to backend or configure based on environment
       const backendUrl = "http://localhost:8888";
-      const response = await fetch(`${backendUrl}/user/check-wallet`, {
+      const endpoint = isWalletCreatedEnv
+        ? "/user/test-check-wallet"
+        : "/user/check-wallet";
+
+      console.log(
+        "Using endpoint:",
+        endpoint,
+        "WalletCreated env:",
+        isWalletCreatedEnv
+      );
+
+      const response = await fetch(`${backendUrl}${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ telegramUserId }),
+        body: isWalletCreatedEnv
+          ? JSON.stringify({})
+          : JSON.stringify({ telegramUserId }),
       });
-
-      console.log("response", response);
 
       const result = await response.json();
 
       if (result.exists) {
         // Wallet exists, skip to ready state
-        setGlobal({
+        const globalUpdate: any = {
           ...getGlobal(),
           authState: "authorizationStateReady",
-        });
+        };
+        if (isWalletCreatedEnv) {
+          globalUpdate.currentUserId = telegramUserIdTest;
+          // Create user object with premium status to prevent undefined errors
+          globalUpdate.users = {
+            ...globalUpdate.users,
+            byId: {
+              ...globalUpdate.users.byId,
+              [telegramUserIdTest]: {
+                id: telegramUserIdTest,
+                isMin: false,
+                isPremium: true,
+                type: "userTypeRegular",
+                phoneNumber: "",
+                firstName: "Test User",
+              },
+            },
+          };
+        }
+        setGlobal(globalUpdate);
       } else {
         // Wallet doesn't exist, proceed to wallet creation
-        setGlobal({
+        const globalUpdate: any = {
           ...getGlobal(),
           authState: "authorizationStateWalletCreated",
-        });
+        };
+        if (isWalletCreatedEnv) {
+          globalUpdate.currentUserId = telegramUserIdTest;
+          // Create user object with premium status to prevent undefined errors
+          globalUpdate.users = {
+            ...globalUpdate.users,
+            byId: {
+              ...globalUpdate.users.byId,
+              [telegramUserIdTest]: {
+                id: telegramUserIdTest,
+                isMin: false,
+                isPremium: true,
+                type: "userTypeRegular",
+                phoneNumber: "",
+                firstName: "Test User",
+              },
+            },
+          };
+        }
+        setGlobal(globalUpdate);
       }
     } catch (error) {
       console.error("Failed to check wallet:", error);
       // On error, proceed to wallet creation to be safe
-      setGlobal({
+      const globalUpdate: any = {
         ...getGlobal(),
         authState: "authorizationStateWalletCreated",
-      });
+      };
+      if (isWalletCreatedEnv) {
+        globalUpdate.currentUserId = telegramUserIdTest;
+        // Create user object with premium status to prevent undefined errors
+        globalUpdate.users = {
+          ...globalUpdate.users,
+          byId: {
+            ...globalUpdate.users.byId,
+            [telegramUserIdTest]: {
+              id: telegramUserIdTest,
+              isMin: false,
+              isPremium: true,
+              type: "userTypeRegular",
+              phoneNumber: "",
+              firstName: "Test User",
+            },
+          },
+        };
+      }
+      setGlobal(globalUpdate);
     }
   }
 );

@@ -44,7 +44,7 @@ const CSP = `
   connect-src 'self' wss://*.web.telegram.org blob: http: https: ${APP_ENV === 'development' ? 'wss:' : ''};
   script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' blob: https://t.me/_websync_ https://telegram.me/_websync_;
   style-src 'self' 'unsafe-inline';
-  img-src 'self' data: blob: https://ss3.4sqi.net/img/categories_v2/
+  img-src 'self' data: blob: https://ss3.4sqi.net/img/categories_v2/ https://ipfs.io/ipfs/ https://dweb.link/ipfs/ https://cloudflare-ipfs.com/ipfs/ https://*.mypinata.cloud/ipfs/
   ${IS_PACKAGED_ELECTRON ? `${BASE_URL}/` : ''};
   media-src 'self' blob: data: ${IS_PACKAGED_ELECTRON ? [`${BASE_URL}/`, ELECTRON_HOST_URL].join(' ') : ''};
   object-src 'none';

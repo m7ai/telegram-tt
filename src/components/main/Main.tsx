@@ -599,6 +599,12 @@ const Main = ({
     "moonraker-column-shown"
   );
 
+  console.log(
+    "🏠 Main component render - isTradingColumnOpen:",
+    isTradingColumnOpen
+  );
+  console.log("🎨 Main component render - className:", className);
+
   const handleBlur = useLastCallback(() => {
     onTabFocusChange({ isBlurred: true });
   });

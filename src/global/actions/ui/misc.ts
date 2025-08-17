@@ -82,16 +82,34 @@ addActionHandler(
 addActionHandler(
   "openTradingColumn",
   (global, actions, payload): ActionReturnType => {
-    const { coin, tabId = getCurrentTabId() } = payload;
+    const { coin, mintAddress, tabId = getCurrentTabId() } = payload;
 
-    return updateTabState(
+    console.log("🚀 openTradingColumn action handler called with:", {
+      coin,
+      mintAddress,
+      tabId,
+    });
+    console.log(
+      "📈 Current global state isTradingColumnShown:",
+      global.byTabId[tabId]?.isTradingColumnShown
+    );
+
+    const newState = updateTabState(
       global,
       {
         isTradingColumnShown: true,
         selectedTradingCoin: coin,
+        selectedTradingMintAddress: mintAddress,
       },
       tabId
     );
+
+    console.log(
+      "✨ New state isTradingColumnShown:",
+      newState.byTabId[tabId]?.isTradingColumnShown
+    );
+
+    return newState;
   }
 );
 
@@ -105,6 +123,7 @@ addActionHandler(
       {
         isTradingColumnShown: false,
         selectedTradingCoin: undefined,
+        selectedTradingMintAddress: undefined,
       },
       tabId
     );

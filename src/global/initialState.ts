@@ -351,6 +351,7 @@ export const INITIAL_TAB_STATE: TabState = {
   isChatInfoShown: false,
   isTradingColumnShown: false,
   selectedTradingCoin: undefined,
+  selectedTradingMintAddress: undefined,
   newChatMembersProgress: NewChatMembersProgress.Closed,
   uiReadyState: 0,
   shouldInit: true,

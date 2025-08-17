@@ -6,7 +6,7 @@ import {
   useState,
 } from "../lib/teact/teact";
 import { withGlobal } from "../global";
-import { getGlobal, setGlobal } from "../global";
+import { getActions, getGlobal, setGlobal } from "../global";
 
 import type { GlobalState } from "../global/types";
 import type { ThemeKey } from "../types";
@@ -205,6 +205,23 @@ const App: FC<StateProps> = ({
       body.removeEventListener("dragenter", handleDrag);
     };
   }, []);
+
+  // Call checkWallet when in dev:WalletCreated mode and authState is WalletCreated
+  useEffect(() => {
+    if (IS_WALLET_CREATED && authState === "authorizationStateWalletCreated") {
+      const { checkWallet } = getActions();
+      const global = getGlobal();
+
+      console.log("Dev:WalletCreated mode - calling checkWallet", {
+        authState,
+        currentUserId: global.currentUserId,
+      });
+
+      // Use a mock user ID for testing, or actual user ID if available
+      const testUserId = global.currentUserId || "8214814881";
+      checkWallet({ telegramUserId: testUserId });
+    }
+  }, [authState]);
 
   // return <Test />;
 

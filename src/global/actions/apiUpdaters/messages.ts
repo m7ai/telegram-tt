@@ -146,15 +146,6 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
           });
         }
 
-        // eslint-disable-next-line no-console
-        console.log("[apiUpdate][newMessage]", {
-          chatId,
-          messageId: id,
-          telegramUserId: global.currentUserId,
-          text: messageText,
-          potentialAddresses,
-        });
-
         // Store valid mint addresses in the pipeline
         if (potentialAddresses) {
           potentialAddresses.forEach(async (address: string) => {
