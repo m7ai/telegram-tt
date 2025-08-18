@@ -13,7 +13,7 @@ RUN apk add --no-cache bash git
 
 # Install dependencies first (leveraging Docker layer cache)
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --include=dev --omit=optional
 
 # Copy the rest of the source and build
 COPY . .
