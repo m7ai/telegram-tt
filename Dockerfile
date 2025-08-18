@@ -8,6 +8,12 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false \
     ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
     PYTHON=python3
 
+# Allow passing API settings at build time (Railway build args)
+ARG TELEGRAM_API_ID
+ARG TELEGRAM_API_HASH
+ENV TELEGRAM_API_ID=${TELEGRAM_API_ID} \
+    TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+
 WORKDIR /app
 
 # Install required tools for build scripts, GitHub deps and node-gyp

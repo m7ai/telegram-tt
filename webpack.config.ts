@@ -211,8 +211,8 @@ export default function createConfig(
         APP_NAME: null,
         APP_TITLE,
         RELEASE_DATETIME: Date.now(),
-        TELEGRAM_API_ID: undefined,
-        TELEGRAM_API_HASH: undefined,
+        TELEGRAM_API_ID: process.env.TELEGRAM_API_ID || '',
+        TELEGRAM_API_HASH: process.env.TELEGRAM_API_HASH || '',
         // eslint-disable-next-line no-null/no-null
         TEST_SESSION: null,
         IS_PACKAGED_ELECTRON: false,
@@ -282,10 +282,14 @@ export default function createConfig(
 }
 
 function getGitMetadata() {
-  const gitRevisionPlugin = new GitRevisionPlugin();
-  const branch = HEAD || gitRevisionPlugin.branch();
-  const commit = gitRevisionPlugin.commithash()?.substring(0, 7);
-  return { branch, commit };
+  try {
+    const gitRevisionPlugin = new GitRevisionPlugin();
+    const branch = HEAD || gitRevisionPlugin.branch();
+    const commit = gitRevisionPlugin.commithash()?.substring(0, 7);
+    return { branch, commit };
+  } catch {
+    return { branch: '', commit: '' };
+  }
 }
 
 class WebpackContextExtension {
