@@ -9,25 +9,13 @@ import {
   Timezone,
 } from "./charting_library";
 import {
-  fetchPoolOhlcv,
-  HMPoolTokenMetadata,
+  fetchMintAddressOhlcv,
+  HMTokenMetadata,
 } from "../../../hooks/hellomoon/hmApi";
 import { RES_TO_INTERVAL } from "./helpers";
 
 const configurationData: DatafeedConfiguration = {
-  supported_resolutions: [
-    "1S",
-    "1",
-    "5",
-    "15",
-    "30",
-    "60",
-    "120",
-    "240",
-    "480",
-    "1D",
-    "1W",
-  ] as ResolutionString[],
+  supported_resolutions: ["1D", "1W"] as ResolutionString[],
   symbols_types: [
     {
       name: "crypto",
@@ -49,39 +37,38 @@ export default {
     onSymbolResolvedCallback: (symbolInfo: LibrarySymbolInfo) => void,
     onResolveErrorCallback: (reason: string) => void
   ) => {
-    const { poolMetadata, currency, chartType } = JSON.parse(symbolName) as {
-      poolMetadata: HMPoolTokenMetadata;
+    const { tokenMetadata, currency, chartType } = JSON.parse(symbolName) as {
+      tokenMetadata: HMTokenMetadata;
       currency: "usd" | "whype";
       chartType: "price" | "mcap";
     };
 
-    const flip =
-      poolMetadata.token0?.address ===
-      "0x5555555555555555555555555555555555555555";
+    // For single token view, use the token directly
+    const desiredToken = tokenMetadata;
+    const baseToken = null;
 
-    const desiredToken = flip ? poolMetadata.token1 : poolMetadata.token0;
-    const baseToken = flip ? poolMetadata.token0 : poolMetadata.token1 || null;
+    const symbolDisplayName = desiredToken?.symbol || "Unknown";
 
     const symbolInfo: any = {
-      name: `${desiredToken?.symbol}/${baseToken?.symbol}`,
-      ticker: `${desiredToken?.symbol}/${baseToken?.symbol}`,
-      description: `${desiredToken?.symbol}/${baseToken?.symbol}`,
+      name: symbolDisplayName,
+      ticker: symbolDisplayName,
+      description: symbolDisplayName,
       type: "crypto",
       session: "24x7",
       timezone: userTimezone as Timezone,
-      exchange: "HyperSwap",
+      exchange: "Solana",
       minmov: 1,
       pricescale: 10 ** 16,
-      has_intraday: true,
-      has_seconds: true,
+      has_intraday: false,
+      has_seconds: false,
       has_weekly_and_monthly: true,
       has_daily: true,
-      listed_exchange: "HyperSwap",
+      listed_exchange: "Solana",
       format: "price",
       supported_resolutions: configurationData.supported_resolutions || [],
       volume_precision: 2,
       data_status: "streaming",
-      address: poolMetadata.address,
+      address: tokenMetadata.address,
       desiredAddress: desiredToken?.address,
       currency,
     };
@@ -97,7 +84,7 @@ export default {
   ) => {
     const { from, to, countBack } = periodParams;
 
-    fetchPoolOhlcv(
+    fetchMintAddressOhlcv(
       symbolInfo.address,
       RES_TO_INTERVAL[resolution],
       from,
@@ -105,19 +92,37 @@ export default {
       countBack,
       symbolInfo.currency === "usd",
       symbolInfo.desiredAddress
-    ).then((data) => {
-      console.log("[TVChart] Fetching pool metadata for:", data);
-      onHistoryCallback(
-        data.data.map((bar) => ({
+    )
+      .then((data) => {
+        // Filter to the requested time range to satisfy TV's paginator
+        const filtered = (data.data || []).filter((bar) => {
+          const t = bar.t; // seconds
+          if (from != null && t < from) return false;
+          if (to != null && t > to) return false;
+          return true;
+        });
+
+        const formatted = filtered.map((bar) => ({
           time: bar.t * 1000,
           open: bar.o,
           high: bar.h,
           low: bar.l,
           close: bar.c,
           volume: bar.v,
-        }))
-      );
-    });
+        }));
+
+        const noData = formatted.length === 0;
+        if (noData) {
+          console.log("[TVChart] No data in requested range");
+        }
+        // Signal noData so TradingView stops requesting older ranges
+        // @ts-ignore - meta argument supported by TradingView
+        onHistoryCallback(formatted, { noData });
+      })
+      .catch((error) => {
+        console.error("[TVChart] Error fetching OHLCV data:", error);
+        onErrorCallback(error?.message || "Failed to fetch chart data");
+      });
   },
   subscribeBars: (
     symbolInfo: any,

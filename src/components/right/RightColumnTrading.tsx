@@ -18,11 +18,11 @@ import useResizeObserver from "../../hooks/useResizeObserver";
 
 import TVChart from "../tradingview/TVChart/TVChart";
 import type {
-  HMPoolTokenMetadata,
+  HMTokenMetadata,
   M7TokenMetadataResponse,
 } from "../../hooks/hellomoon/hmApi";
 import {
-  fetchPoolTokenMetadata,
+  fetchMintAddressMetadata,
   fetchTokenMetadata,
   buySwap,
   sellSwap,
@@ -102,8 +102,8 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
   );
 
   // TVChart state and logic
-  const [poolMetadata, setPoolMetadata] = useState<
-    HMPoolTokenMetadata | undefined
+  const [chartTokenMetadata, setChartTokenMetadata] = useState<
+    HMTokenMetadata | undefined
   >();
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
@@ -121,6 +121,12 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     null
   );
   const [swapError, setSwapError] = useState<string | null>(null);
+  const [swapErrorDetails, setSwapErrorDetails] = useState<{
+    status?: number;
+    signature?: string;
+    transactionMessage?: string;
+    transactionLogs?: string[];
+  } | null>(null);
 
   // Derived state for user holdings
   const userHoldings = useMemo(() => {
@@ -156,36 +162,37 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
       });
   }, [selectedMintAddress, currentUserId]);
 
-  // Use hardcoded pool address
-  const poolAddress = "0x337b56d87a6185cd46af3ac2cdf03cbc37070c30";
+  // Use selected mint address
+  const mintAddress = selectedMintAddress;
 
   useEffect(() => {
-    if (!poolAddress) return;
+    if (!mintAddress) return;
 
     setIsLoadingChart(true);
     setChartError(null);
 
-    fetchPoolTokenMetadata(poolAddress)
-      .then((data) => {
-        setPoolMetadata(data);
+    fetchMintAddressMetadata(mintAddress)
+      .then((tokenData) => {
+        console.log("[TVChart] Token data:", tokenData);
+        setChartTokenMetadata(tokenData);
         setIsLoadingChart(false);
       })
       .catch((err) => {
-        console.error("[TVChart] Failed to load pool metadata", err);
+        console.error("[TVChart] Failed to load token metadata", err);
         setChartError(err.message || "Failed to load chart data");
         setIsLoadingChart(false);
       });
-  }, [poolAddress]);
+  }, [mintAddress]);
 
   const TVChartElem = useMemo(() => {
-    if (!poolMetadata) return null;
+    if (!chartTokenMetadata) return null;
     return (
       <TVChart
-        poolMetadata={poolMetadata}
+        tokenMetadata={chartTokenMetadata}
         settings={{ chartType: "price", currency: "usd" }}
       />
     );
-  }, [poolMetadata]);
+  }, [chartTokenMetadata]);
 
   const handleClose = useLastCallback(() => {
     closeTradingColumn();
@@ -222,6 +229,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
 
   const handleCloseError = useLastCallback(() => {
     setSwapError(null);
+    setSwapErrorDetails(null);
   });
 
   const handleBuySwap = useLastCallback(async () => {
@@ -282,13 +290,23 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
 
       // Extract error message from response
       let errorMessage = "Transaction failed. Please try again.";
-      if (error?.response?.data?.message) {
-        errorMessage = error.response.data.message;
+      const responseData = error?.response?.data;
+      if (typeof responseData === "string") {
+        errorMessage = responseData;
+      } else if (responseData?.message) {
+        errorMessage = responseData.message;
       } else if (error?.message) {
         errorMessage = error.message;
       }
 
       setSwapError(errorMessage);
+      setSwapErrorDetails({
+        status: error?.response?.status,
+        signature: responseData?.signature,
+        transactionMessage:
+          responseData?.transactionMessage || responseData?.message,
+        transactionLogs: responseData?.transactionLogs,
+      });
     } finally {
       setIsSwapLoading(false);
     }
@@ -352,13 +370,23 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
 
       // Extract error message from response
       let errorMessage = "Transaction failed. Please try again.";
-      if (error?.response?.data?.message) {
-        errorMessage = error.response.data.message;
+      const responseData = error?.response?.data;
+      if (typeof responseData === "string") {
+        errorMessage = responseData;
+      } else if (responseData?.message) {
+        errorMessage = responseData.message;
       } else if (error?.message) {
         errorMessage = error.message;
       }
 
       setSwapError(errorMessage);
+      setSwapErrorDetails({
+        status: error?.response?.status,
+        signature: responseData?.signature,
+        transactionMessage:
+          responseData?.transactionMessage || responseData?.message,
+        transactionLogs: responseData?.transactionLogs,
+      });
     } finally {
       setIsSwapLoading(false);
     }
@@ -872,42 +900,62 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                     </div>
                     <div className="error-message">
                       {swapError}
+                      {swapErrorDetails?.transactionMessage && (
+                        <div className="error-details">
+                          <div className="error-details-title">Details</div>
+                          <pre className="error-details-pre">
+                            {swapErrorDetails.transactionMessage}
+                          </pre>
+                        </div>
+                      )}
+                      {swapErrorDetails?.transactionLogs?.length ? (
+                        <div className="error-logs">
+                          <div className="error-details-title">Logs</div>
+                          <pre className="error-details-pre">
+                            {JSON.stringify(
+                              swapErrorDetails.transactionLogs,
+                              null,
+                              2
+                            )}
+                          </pre>
+                        </div>
+                      ) : null}
                       <div className="error-suggestions">
                         You can retry the transaction or adjust your trading
                         presets below to help ensure successful execution.
                       </div>
                     </div>
-                    {swapError.includes("check transaction") &&
-                      swapError.match(/[A-Za-z0-9]{44}/g) && (
-                        <div className="transaction-id">
-                          <span className="transaction-label">
-                            Check status:
-                          </span>
-                          <a
-                            className="solscan-link"
-                            href={`https://solscan.io/tx/${
-                              swapError.match(/[A-Za-z0-9]{44}/g)![0]
-                            }`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="View transaction on Solscan"
+                    {(swapErrorDetails?.signature ||
+                      (swapError.includes("check transaction") &&
+                        swapError.match(/[A-Za-z0-9]{44}/g))) && (
+                      <div className="transaction-id">
+                        <span className="transaction-label">Check status:</span>
+                        <a
+                          className="solscan-link"
+                          href={`https://solscan.io/tx/${
+                            swapErrorDetails?.signature ||
+                            swapError.match(/[A-Za-z0-9]{44}/g)![0]
+                          }`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="View transaction on Solscan"
+                        >
+                          View on Solscan
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
                           >
-                            View on Solscan
-                            <svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                              <polyline points="15,3 21,3 21,9"></polyline>
-                              <line x1="10" y1="14" x2="21" y2="3"></line>
-                            </svg>
-                          </a>
-                        </div>
-                      )}
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                            <polyline points="15,3 21,3 21,9"></polyline>
+                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                          </svg>
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
 

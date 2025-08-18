@@ -99,8 +99,8 @@ export const fetchPoolTransaction = async (
   return response.json();
 };
 
-export const fetchPoolOhlcv = async (
-  poolAddress: string,
+export const fetchMintAddressOhlcv = async (
+  mintAddress: string,
   interval: OhlcvInterval = "1m",
   from?: number,
   to?: number,
@@ -108,31 +108,81 @@ export const fetchPoolOhlcv = async (
   usd?: boolean,
   token?: string
 ): Promise<{
-  poolAddress: string;
+  mintAddress: string;
   interval: OhlcvInterval;
   selectedToken: string;
   inverted: boolean;
   data: HMOhlcv[];
 }> => {
-  const params = new URLSearchParams({
-    interval,
-    ...(from && { from: from.toString() }),
-    ...(to && { to: to.toString() }),
-    ...(take && { take: take.toString() }),
-    ...(usd && { usd: usd.toString() }),
-    ...(token && { token }),
+  // Map intervals to our TradingView endpoint format
+  const intervalMap: { [key in OhlcvInterval]: string } = {
+    "1s": "1D", // Not supported, fallback to 1D
+    "1m": "1D", // Not supported, fallback to 1D
+    "5m": "1D", // Not supported, fallback to 1D
+    "15m": "1D", // Not supported, fallback to 1D
+    "30m": "1D", // Not supported, fallback to 1D
+    "1h": "1D", // Not supported, fallback to 1D
+    "2h": "1D", // Not supported, fallback to 1D
+    "4h": "1D", // Not supported, fallback to 1D
+    "8h": "1D", // Not supported, fallback to 1D
+    "1D": "1D",
+    "1W": "1W",
+  };
+
+  const mappedInterval = intervalMap[interval] || "1D";
+  const currency = usd ? "usd" : "sol";
+
+  console.log({
+    address: token || mintAddress,
+    type: mappedInterval,
+    currency: currency,
   });
 
-  const response = await fetch(
-    `${API_URL}/pools/${poolAddress}/ohlcv?${params}`,
-    {
-      headers: {
-        Authorization: bearerToken,
+  try {
+    const response = await axios.get(`${M7_API_URL}/tradingview/ohlcv`, {
+      params: {
+        address: token || mintAddress,
+        type: mappedInterval,
+        currency: currency,
       },
-    }
-  );
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
-  return response.json();
+    const result = response.data;
+
+    // Transform BirdeyeOHLCVItem[] to HMOhlcv[] format
+    const transformedData: HMOhlcv[] = result.data.map((item: any) => ({
+      t: item.unixTime, // Convert from unixTime to t
+      o: item.o, // open
+      h: item.h, // high
+      l: item.l, // low
+      c: item.c, // close
+      v: item.v, // volume
+    }));
+
+    console.log("[MintAddressOhlcv] Transformed data:", transformedData);
+
+    return {
+      mintAddress: mintAddress,
+      interval,
+      selectedToken: token || mintAddress,
+      inverted: false,
+      data: transformedData,
+    };
+  } catch (error) {
+    console.error("Error fetching OHLCV data from M7 backend:", error);
+
+    // Fallback to empty data or throw error
+    return {
+      mintAddress: mintAddress,
+      interval,
+      selectedToken: token || mintAddress,
+      inverted: false,
+      data: [],
+    };
+  }
 };
 
 export const fetchPairPools = async (
@@ -194,21 +244,35 @@ export interface HMPoolTokenMetadata {
   token1: HMTokenMetadata | null;
 }
 
-export const fetchPoolTokenMetadata = async (
-  poolAddress: string
-): Promise<HMPoolTokenMetadata> => {
-  const response = await fetch(
-    `${API_URL}/pools/${poolAddress}/token-metadata`,
-    {
-      headers: {
-        Authorization: bearerToken,
+export const fetchMintAddressMetadata = async (
+  mintAddress: string
+): Promise<HMTokenMetadata> => {
+  try {
+    const response = await axios.get(`${M7_API_URL}/tradingview/token-data`, {
+      params: {
+        mintAddress: mintAddress,
       },
-    }
-  );
-  if (!response.ok) {
-    throw new Error("Failed to fetch pool token metadata");
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    // Extract the data from the response
+    const tokenData = response.data.data;
+
+    // Transform to HMTokenMetadata format
+    return {
+      address: tokenData.address,
+      symbol: tokenData.symbol,
+      name: tokenData.name,
+      decimals: tokenData.decimals,
+      createdAt: tokenData.createdAt,
+      updatedAt: tokenData.updatedAt,
+    };
+  } catch (error) {
+    console.error("Error fetching mint address metadata:", error);
+    throw new Error("Failed to fetch mint address metadata");
   }
-  return response.json();
 };
 
 export interface HMPool {

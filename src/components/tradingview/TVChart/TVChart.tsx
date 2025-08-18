@@ -8,7 +8,7 @@ import {
 } from "./charting_library";
 import Datafeed from "./datafeed";
 import { formatPrice } from "./helpers";
-import { HMPoolTokenMetadata } from "../../../hooks/hellomoon/hmApi";
+import { HMTokenMetadata } from "../../../hooks/hellomoon/hmApi";
 import { disableStrict, enableStrict } from "../../../lib/fasterdom/fasterdom";
 
 // Helper function to create chart type button HTML
@@ -83,11 +83,11 @@ export interface ChartSettings {
 }
 
 interface TVChartProps {
-  poolMetadata: HMPoolTokenMetadata;
+  tokenMetadata: HMTokenMetadata;
   settings: ChartSettings;
 }
 
-const TVChart: FC<TVChartProps> = ({ poolMetadata, settings }) => {
+const TVChart: FC<TVChartProps> = ({ tokenMetadata, settings }) => {
   const [chartType, setChartType] = useState<"price" | "mcap">(
     settings.chartType
   );
@@ -142,19 +142,19 @@ const TVChart: FC<TVChartProps> = ({ poolMetadata, settings }) => {
 
       const widgetOptions: ChartingLibraryWidgetOptions = {
         symbol: JSON.stringify({
-          poolMetadata,
+          tokenMetadata,
           currency,
           chartType,
         }),
         datafeed: Datafeed,
-        interval: "5" as ResolutionString,
+        interval: "1D" as ResolutionString,
         locale: "en",
         container: containerRef.current!,
         library_path: "/charting_library/",
         autosize: true,
         // theme: "dark",
         disabled_features: ["header_compare", "header_symbol_search"],
-        enabled_features: ["seconds_resolution"],
+        enabled_features: [],
         client_id: "hyperswap",
         // custom_themes: {
         //   "paneProperties.background": "#1D1E20",
@@ -249,7 +249,7 @@ const TVChart: FC<TVChartProps> = ({ poolMetadata, settings }) => {
         appendedScript = null;
       }
     };
-  }, [customCssUrl, chartType, currency, poolMetadata]);
+  }, [customCssUrl, chartType, currency, tokenMetadata]);
 
   return <div ref={containerRef} style="height: 100%; width: 100%;" />;
 };
