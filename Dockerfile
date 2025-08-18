@@ -4,12 +4,14 @@ FROM node:22-alpine AS build
 # Reduce npm noise and skip funding/update checks
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false \
     NPM_CONFIG_FUND=false \
-    NODE_ENV=production
+    NODE_ENV=production \
+    ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
+    PYTHON=python3
 
 WORKDIR /app
 
-# Install required tools for build scripts and GitHub deps
-RUN apk add --no-cache bash git
+# Install required tools for build scripts, GitHub deps and node-gyp
+RUN apk add --no-cache bash git python3 make g++
 
 # Install dependencies first (leveraging Docker layer cache)
 COPY package*.json ./
