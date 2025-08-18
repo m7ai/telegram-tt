@@ -30,6 +30,7 @@ import { startWebsync, stopWebsync } from "../../../util/websync";
 import { callApi } from "../../../api/gramjs";
 import { clearCaching, setupCaching } from "../../cache";
 import { addActionHandler, getGlobal, setGlobal } from "../../index";
+import { M7_API_URL } from "../../../config";
 import { updateSharedSettings } from "../../reducers";
 import { updateTabState } from "../../reducers/tabs";
 import {
@@ -308,7 +309,7 @@ addActionHandler(
 
     try {
       // Use relative path that can be proxied to backend or configure based on environment
-      const backendUrl = "http://localhost:8888";
+      const backendUrl = M7_API_URL;
       const endpoint = isWalletCreatedEnv
         ? "/user/test-check-wallet"
         : "/user/check-wallet";

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { M7_API_URL } from "../../config";
 
 export type PoolsSortBy = "tvl" | "apr" | "vol";
 export type OhlcvInterval =
@@ -24,8 +25,7 @@ export interface HMPagination {
 const API_URL = "https://hyperswap-public-production.up.railway.app/data";
 const API_KEY = "O2c5gIAB/ePI+uP22JnbOvZu2K401M910OQL9YKSQSI="; // hardcoded for ease of testing for now
 
-// M7 Backend API
-const M7_API_URL = "http://localhost:8888";
+// M7 Backend API (from env via config)
 
 const bearerToken = `Bearer ${API_KEY}`;
 

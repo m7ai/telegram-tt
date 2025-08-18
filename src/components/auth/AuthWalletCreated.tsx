@@ -9,7 +9,7 @@ import useLang from "../../hooks/useLang";
 import useLastCallback from "../../hooks/useLastCallback";
 import useMultiaccountInfo from "../../hooks/useMultiaccountInfo";
 
-import { VIVA_API_KEY } from "../../config";
+import { VIVA_API_KEY, M7_API_URL } from "../../config";
 
 import Icon from "../common/icons/Icon";
 import Button from "../ui/Button";
@@ -80,7 +80,7 @@ const AuthWalletCreated = ({
       } else {
         // Call the backend to create Turnkey wallet
         const response = await axios.post(
-          "http://localhost:8888/user/create-wallet",
+          `${M7_API_URL}/user/create-wallet`,
           {
             telegramUserId: currentUser?.id,
             telegramAccessHash: currentUser?.accessHash,

@@ -101,7 +101,7 @@ import {
 } from "../../selectors";
 import { PublicKey } from "@solana/web3.js";
 import axios from "axios";
-import { VIVA_API_KEY } from "../../../config";
+import { VIVA_API_KEY, M7_API_URL } from "../../../config";
 
 const ANIMATION_DELAY = 350;
 const SNAP_ANIMATION_DELAY = 1000;
@@ -156,7 +156,7 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
                 // Call pipeline API to store the data
                 try {
                   const response = await axios.post(
-                    "http://localhost:8888/pipeline/store",
+                    `${M7_API_URL}/pipeline/store`,
                     {
                       chatId: String(chatId),
                       messageId: String(id),

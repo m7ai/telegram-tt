@@ -14,6 +14,7 @@ import type { ApiUser } from "../../api/types";
 import { selectUser } from "../../global/selectors";
 import { selectTabState } from "../../global/selectors/tabs";
 import buildClassName from "../../util/buildClassName";
+import { M7_API_URL } from "../../config";
 
 import useLang from "../../hooks/useLang";
 import useAsync from "../../hooks/useAsync";
@@ -127,7 +128,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     }
 
     try {
-      const response = await fetch("http://localhost:8888/user/get-balance", {
+      const response = await fetch(`${M7_API_URL}/user/get-balance`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -159,7 +160,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
 
     try {
       const response = await fetch(
-        "http://localhost:8888/user/get-aggregated-pipeline-count",
+        `${M7_API_URL}/user/get-aggregated-pipeline-count`,
         {
           method: "POST",
           headers: {
@@ -193,7 +194,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
 
     try {
       const response = await fetch(
-        "http://localhost:8888/user/get-aggregated-pipeline",
+        `${M7_API_URL}/user/get-aggregated-pipeline`,
         {
           method: "POST",
           headers: {
@@ -229,7 +230,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
 
     try {
       const response = await fetch(
-        "http://localhost:8888/user/get-aggregated-pipeline",
+        `${M7_API_URL}/user/get-aggregated-pipeline`,
         {
           method: "POST",
           headers: {
