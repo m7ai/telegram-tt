@@ -106,6 +106,7 @@ export default {
       symbolInfo.currency === "usd",
       symbolInfo.desiredAddress
     ).then((data) => {
+      console.log("[TVChart] Fetching pool metadata for:", data);
       onHistoryCallback(
         data.data.map((bar) => ({
           time: bar.t * 1000,

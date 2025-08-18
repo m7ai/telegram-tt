@@ -10,7 +10,8 @@ export function useResize(
   onResize: (width: number) => void,
   onReset: NoneToVoidFunction,
   initialWidth?: number,
-  cssPropertyName?: string
+  cssPropertyName?: string,
+  invertDirection: boolean = false
 ) {
   const [isActive, markIsActive, unmarkIsActive] = useFlag();
   const [initialMouseX, setInitialMouseX] = useState<number>(0);
@@ -66,9 +67,9 @@ export function useResize(
     if (!isActive) return undefined;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.ceil(
-        initialElementWidth + e.clientX - initialMouseX
-      );
+      const deltaX = e.clientX - initialMouseX;
+      const adjustedDeltaX = invertDirection ? -deltaX : deltaX;
+      const newWidth = Math.ceil(initialElementWidth + adjustedDeltaX);
       setElementStyle(newWidth);
     };
 
@@ -98,6 +99,7 @@ export function useResize(
     isActive,
     unmarkIsActive,
     setElementStyle,
+    invertDirection,
   ]);
 
   return { initResize, resetResize, handleMouseUp };

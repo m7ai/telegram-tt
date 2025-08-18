@@ -1,5 +1,12 @@
 import type { FC } from "../../lib/teact/teact";
-import { memo, useMemo, useState, useEffect } from "../../lib/teact/teact";
+import {
+  memo,
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from "../../lib/teact/teact";
 import { getActions, withGlobal } from "../../global";
 
 import type { ApiUser } from "../../api/types";
@@ -11,6 +18,10 @@ import buildClassName from "../../util/buildClassName";
 import useLang from "../../hooks/useLang";
 import useAsync from "../../hooks/useAsync";
 import { formatNumber } from "../../util/formatNumber";
+import {
+  useOnIntersect,
+  useIntersectionObserver,
+} from "../../hooks/useIntersectionObserver";
 
 import "./RightColumnProfile.scss";
 
@@ -94,6 +105,18 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
   const [logoLoadErrors, setLogoLoadErrors] = useState<Set<string>>(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
+  const [allPipelineData, setAllPipelineData] = useState<
+    AggregatedPipelineItem[]
+  >([]);
+  const [hasMoreData, setHasMoreData] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Refs for infinite scroll
+  // Use the actual scrollable container as root: `.sidebar-content`
+  const sidebarContentRef = useRef<HTMLDivElement>();
+  const coinsContainerRef = useRef<HTMLDivElement>();
+  const loadMoreTriggerRef = useRef<HTMLDivElement>();
+  const loadedIdsRef = useRef<Set<string>>(new Set());
 
   const className = buildClassName("RightColumnProfile", isActive && "active");
 
@@ -196,6 +219,59 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     }
   };
 
+  // Load more data function for infinite scroll
+  const loadMoreData = useCallback(async () => {
+    if (isLoadingMore || !hasMoreData || !currentUserId) {
+      return;
+    }
+
+    setIsLoadingMore(true);
+
+    try {
+      const response = await fetch(
+        "http://localhost:8888/user/get-aggregated-pipeline",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            telegramUserId: currentUserId,
+            page: currentPage + 1,
+            limit: coinsPerPage,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data: AggregatedPipelineResponse = await response.json();
+
+      if (data.data && data.data.length > 0) {
+        // Filter out duplicates by id
+        const newItems = data.data.filter(
+          (item) => !loadedIdsRef.current.has(item.id)
+        );
+        newItems.forEach((item) => loadedIdsRef.current.add(item.id));
+
+        if (newItems.length > 0) {
+          setAllPipelineData((prev) => [...prev, ...newItems]);
+        }
+
+        setCurrentPage((prev) => prev + 1);
+        setHasMoreData(data.pagination.hasNext);
+      } else {
+        setHasMoreData(false);
+      }
+    } catch (error) {
+      console.error("Failed to load more data:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [currentUserId, currentPage, coinsPerPage, isLoadingMore, hasMoreData]);
+
   // Add a refresh trigger for wallet balance
   const [walletRefreshTrigger, setWalletRefreshTrigger] = useState(0);
 
@@ -258,17 +334,88 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     error: countError,
   } = useAsync(fetchAggregatedPipelineCount, [currentUserId, refreshTrigger]);
 
-  // Use async hook to fetch aggregated pipeline data
+  // Use async hook to fetch initial aggregated pipeline data
   const {
-    result: pipelineData,
+    result: initialPipelineData,
     isLoading: isPipelineLoading,
     error: pipelineError,
   } = useAsync(fetchAggregatedPipelineData, [
     currentUserId,
-    currentPage,
     coinsPerPage,
     refreshTrigger,
   ]);
+
+  // Update accumulated data when initial data changes
+  useEffect(() => {
+    if (initialPipelineData?.data) {
+      setAllPipelineData(initialPipelineData.data);
+      setHasMoreData(initialPipelineData.pagination.hasNext);
+      setCurrentPage(initialPipelineData.pagination.currentPage || 1);
+      // Reset and fill dedupe set
+      loadedIdsRef.current = new Set(initialPipelineData.data.map((i) => i.id));
+    }
+  }, [initialPipelineData]);
+
+  // Reset accumulated data when user changes or refresh trigger changes
+  useEffect(() => {
+    setAllPipelineData([]);
+    setCurrentPage(1);
+    setHasMoreData(true);
+    loadedIdsRef.current.clear();
+  }, [currentUserId, refreshTrigger]);
+
+  // Set up intersection observer for infinite scroll
+  // Root should be the scrollable `.sidebar-content`, not the inner content
+  const { observe } = useIntersectionObserver({
+    rootRef: sidebarContentRef,
+    // Start loading earlier before reaching the bottom
+    margin: 300,
+    threshold: 0,
+  });
+
+  // Set up intersection observer for the load more trigger
+  useOnIntersect(loadMoreTriggerRef, observe, (entry) => {
+    if (
+      entry.isIntersecting &&
+      hasMoreData &&
+      !isLoadingMore &&
+      !isPipelineLoading
+    ) {
+      loadMoreData();
+    }
+  });
+
+  // Fallback: if list doesn't fill viewport, try to auto-load until it does
+  useEffect(() => {
+    if (!sidebarContentRef.current) return;
+    const container = sidebarContentRef.current;
+    const needsMore =
+      allPipelineData.length > 0 &&
+      hasMoreData &&
+      !isLoadingMore &&
+      container.scrollHeight <= container.clientHeight + 1;
+    if (needsMore) {
+      loadMoreData();
+    }
+  }, [allPipelineData, hasMoreData, isLoadingMore, loadMoreData]);
+
+  // Manual scroll fallback near-bottom detection
+  useEffect(() => {
+    const el = sidebarContentRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      if (!hasMoreData || isLoadingMore || isPipelineLoading) return;
+      const thresholdPx = 300;
+      const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distanceToBottom <= thresholdPx) {
+        loadMoreData();
+      }
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [hasMoreData, isLoadingMore, isPipelineLoading, loadMoreData]);
 
   // Helper function to shorten wallet address
   const shortenAddress = (address: string) => {
@@ -387,7 +534,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
       </div>
 
       {/* Content Section */}
-      <div className="sidebar-content">
+      <div className="sidebar-content" ref={sidebarContentRef}>
         <div className="search-section">
           <div className="search-input-wrapper">
             <svg
@@ -437,17 +584,17 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
             </svg>
           </div>
           {isCoinsExpanded && (
-            <div className="coins-content">
-              {isPipelineLoading ? (
+            <div className="coins-content" ref={coinsContainerRef}>
+              {isPipelineLoading && allPipelineData.length === 0 ? (
                 <div className="loading-state">Loading scanned coins...</div>
               ) : pipelineError ? (
                 <div className="error-state">Error loading coins</div>
-              ) : !pipelineData?.data?.length ? (
+              ) : !allPipelineData?.length ? (
                 <div className="empty-state">No scanned coins found</div>
               ) : (
                 <>
                   <div className="coins-list">
-                    {pipelineData.data.map((item) => (
+                    {allPipelineData.map((item) => (
                       <div
                         key={item.id}
                         className={buildClassName(
@@ -617,27 +764,14 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
                     ))}
                   </div>
 
-                  {/* Pagination Controls */}
-                  {pipelineData.pagination.totalPages > 1 && (
-                    <div className="pagination-controls">
-                      <button
-                        className="pagination-button"
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                        disabled={!pipelineData.pagination.hasPrevious}
-                      >
-                        Previous
-                      </button>
-                      <span className="pagination-info">
-                        Page {pipelineData.pagination.currentPage} of{" "}
-                        {pipelineData.pagination.totalPages}
-                      </span>
-                      <button
-                        className="pagination-button"
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                        disabled={!pipelineData.pagination.hasNext}
-                      >
-                        Next
-                      </button>
+                  {/* Load More Trigger for Infinite Scroll */}
+                  {hasMoreData && (
+                    <div ref={loadMoreTriggerRef} className="load-more-trigger">
+                      {isLoadingMore && (
+                        <div className="loading-more-indicator">
+                          Loading more coins...
+                        </div>
+                      )}
                     </div>
                   )}
                 </>

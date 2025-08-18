@@ -13,6 +13,8 @@ import captureEscKeyListener from "../../util/captureEscKeyListener";
 
 import useHistoryBack from "../../hooks/useHistoryBack";
 import useLastCallback from "../../hooks/useLastCallback";
+import { useResize } from "../../hooks/useResize";
+import useResizeObserver from "../../hooks/useResizeObserver";
 
 import TVChart from "../tradingview/TVChart/TVChart";
 import type {
@@ -63,6 +65,32 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
 }) => {
   const { closeTradingColumn } = getActions();
   const containerRef = useRef<HTMLDivElement>(null!);
+
+  // Enable resizing from the left edge; persist width to CSS var so layout reflows
+  const { initResize, resetResize, handleMouseUp } = useResize(
+    containerRef,
+    (newWidthPx) => {
+      const root = document.documentElement;
+      root.style.setProperty("--trading-column-width", `${newWidthPx}px`);
+    },
+    () => {
+      const root = document.documentElement;
+      root.style.removeProperty("--trading-column-width");
+    },
+    undefined,
+    "--trading-column-width",
+    true
+  );
+
+  // Ensure a fixed default width when the trading column opens
+  useEffect(() => {
+    if (isOpen) {
+      const root = document.documentElement;
+      root.style.setProperty("--trading-column-width", "500px");
+    }
+  }, [isOpen]);
+
+  // Note: Removed width observer to prevent automatic shrinking/capping on mount
 
   // Token metadata state
   const [tokenMetadata, setTokenMetadata] = useState<
@@ -134,7 +162,6 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
   useEffect(() => {
     if (!poolAddress) return;
 
-    console.log("[TVChart] Fetching pool metadata for:", poolAddress);
     setIsLoadingChart(true);
     setChartError(null);
 
@@ -364,6 +391,14 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
       className="RightColumnTrading"
       id="RightColumnTrading"
     >
+      {!isMobile && (
+        <div
+          className="resize-handle"
+          onMouseDown={initResize}
+          onMouseUp={handleMouseUp}
+          onDoubleClick={resetResize}
+        />
+      )}
       {(selectedCoin || tokenMetadata) && (
         <div className="trading-content">
           <div className="coin-item trading-header">
@@ -835,7 +870,13 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                         </svg>
                       </button>
                     </div>
-                    <div className="error-message">{swapError}</div>
+                    <div className="error-message">
+                      {swapError}
+                      <div className="error-suggestions">
+                        You can retry the transaction or adjust your trading
+                        presets below to help ensure successful execution.
+                      </div>
+                    </div>
                     {swapError.includes("check transaction") &&
                       swapError.match(/[A-Za-z0-9]{44}/g) && (
                         <div className="transaction-id">
@@ -943,7 +984,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
               </div>
             </div>
 
-            {/* Pools section */}
+            {/* Trading Presets section */}
             <div className="trade-section">
               <div className="trade-section-content">
                 <div className="pools-tabs">

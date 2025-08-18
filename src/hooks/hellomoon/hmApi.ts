@@ -131,6 +131,7 @@ export const fetchPoolOhlcv = async (
       },
     }
   );
+
   return response.json();
 };
 
