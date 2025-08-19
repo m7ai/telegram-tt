@@ -114,6 +114,8 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
       const { chatId, id, message, shouldForceReply, wasDrafted, poll } =
         update;
 
+      console.log("newMessage", update);
+
       if (DEBUG) {
         const messageText = getMessageText(message as ApiMessage);
 
@@ -153,6 +155,7 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
               // Validate using Solana's PublicKey class
               const publicKey = new PublicKey(address);
               if (PublicKey.isOnCurve(publicKey)) {
+                console.log("MINT ADDRESS FOUND", address);
                 // Call pipeline API to store the data
                 try {
                   const response = await axios.post(

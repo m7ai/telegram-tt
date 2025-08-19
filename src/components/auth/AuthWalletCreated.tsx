@@ -75,8 +75,6 @@ const AuthWalletCreated = ({
         setWalletAddress(mockWalletData.walletAddress);
         setPrivateKey(mockWalletData.privateKey);
         setWalletId(mockWalletData.walletId);
-
-        console.log("Mock wallet created:", mockWalletData);
       } else {
         // Call the backend to create Turnkey wallet
         const response = await axios.post(
