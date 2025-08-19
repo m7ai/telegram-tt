@@ -13,6 +13,8 @@ export const APP_CODE_NAME = "A";
 export const APP_NAME = process.env.APP_NAME || `Telegram Web ${APP_CODE_NAME}`;
 export const RELEASE_DATETIME = process.env.RELEASE_DATETIME;
 
+console.log("APP_NAME", process.env.APP_NAME);
+
 export const PRODUCTION_HOSTNAME = "web.telegram.org";
 export const PRODUCTION_URL = "https://web.telegram.org/a";
 export const WEB_VERSION_BASE = "https://web.telegram.org/"; // Used to redirect to other versions
