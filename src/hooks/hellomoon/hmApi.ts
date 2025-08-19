@@ -425,12 +425,14 @@ export interface BuySwapRequest {
   telegramUserId: string;
   inputAmount: number;
   outputMintAddress: string;
+  presetId?: string;
 }
 
 export interface SellSwapRequest {
   telegramUserId: string;
   inputAmount: number;
   inputMintAddress: string;
+  presetId?: string;
 }
 
 export interface BuySwapResponse {
@@ -464,6 +466,68 @@ export const buySwap = async (
     }
     throw error;
   }
+};
+
+// User Preset Configs
+export interface UserPresetConfig {
+  id: string;
+  configName: string;
+  telegramId: string;
+  priorityFee: number;
+  slippagePercentage: number;
+  isMev: boolean;
+  isTurbo: boolean;
+  jitoBribeAmount: number;
+  insertedAt?: string | Date;
+  lastModifiedAt?: string | Date;
+}
+
+export interface CreatePresetRequest {
+  config_name: string;
+  telegramId: string;
+  priority_fee: number;
+  slippage_percentage: number;
+  is_mev: boolean;
+  is_turbo: boolean;
+  jito_bribe_amount: number;
+}
+
+export interface UpdatePresetRequest {
+  telegramId: string;
+  config_name?: string;
+  priority_fee?: number;
+  slippage_percentage?: number;
+  is_mev?: boolean;
+  is_turbo?: boolean;
+  jito_bribe_amount?: number;
+}
+
+export const getUserPresets = async (
+  telegramId: string
+): Promise<UserPresetConfig[]> => {
+  const res = await axios.get(`${M7_API_URL}/user/config`, {
+    params: { telegramId },
+  });
+  return res.data?.data ?? [];
+};
+
+export const createUserPreset = async (
+  request: CreatePresetRequest
+): Promise<UserPresetConfig> => {
+  const res = await axios.post(`${M7_API_URL}/user/config`, request, {
+    headers: { "Content-Type": "application/json" },
+  });
+  return res.data?.data;
+};
+
+export const updateUserPreset = async (
+  id: string,
+  request: UpdatePresetRequest
+): Promise<UserPresetConfig> => {
+  const res = await axios.put(`${M7_API_URL}/user/config/${id}`, request, {
+    headers: { "Content-Type": "application/json" },
+  });
+  return res.data?.data;
 };
 
 export const sellSwap = async (

@@ -29,6 +29,12 @@ import {
   type BuySwapRequest,
   type SellSwapRequest,
 } from "../../hooks/hellomoon/hmApi";
+import {
+  getUserPresets,
+  createUserPreset,
+  updateUserPreset,
+  type UserPresetConfig,
+} from "../../hooks/hellomoon/hmApi";
 
 import "./RightColumnTrading.scss";
 
@@ -232,6 +238,123 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     setSwapErrorDetails(null);
   });
 
+  // Preset editor state
+  const [isEditingPresets, setIsEditingPresets] = useState(false);
+  const [presets, setPresets] = useState<UserPresetConfig[]>([]);
+  const [activePresetId, setActivePresetId] = useState<string | undefined>(
+    undefined
+  );
+  const [presetForm, setPresetForm] = useState({
+    config_name: "",
+    priority_fee: "0",
+    slippage_percentage: "0",
+    is_mev: false,
+    is_turbo: false,
+    jito_bribe_amount: "0",
+  });
+
+  // Load presets when component mounts or currentUserId changes
+  useEffect(() => {
+    if (currentUserId) {
+      getUserPresets(currentUserId)
+        .then((data) => {
+          setPresets(data);
+          console.log("Loaded presets on mount:", data);
+        })
+        .catch((err) => {
+          console.error("Failed to load presets on mount:", err);
+        });
+    }
+  }, [currentUserId]);
+
+  const handleToggleEditPresets = useLastCallback(async () => {
+    const next = !isEditingPresets;
+    setIsEditingPresets(next);
+    if (next && currentUserId) {
+      try {
+        const data = await getUserPresets(currentUserId);
+        setPresets(data);
+        const first = data[0];
+        if (first) {
+          setActivePresetId(first.id);
+          setPresetForm({
+            config_name: first.configName,
+            priority_fee: first.priorityFee.toString(),
+            slippage_percentage: first.slippagePercentage.toString(),
+            is_mev: first.isMev,
+            is_turbo: first.isTurbo,
+            jito_bribe_amount: first.jitoBribeAmount.toString(),
+          });
+        } else {
+          setActivePresetId(undefined);
+          setPresetForm({
+            config_name: "",
+            priority_fee: "0",
+            slippage_percentage: "0",
+            is_mev: false,
+            is_turbo: false,
+            jito_bribe_amount: "0",
+          });
+        }
+      } catch (e) {
+        console.error("Failed to load presets", e);
+      }
+    }
+  });
+
+  const handlePresetFieldChange = useLastCallback(
+    (field: keyof typeof presetForm, value: string | boolean) => {
+      setPresetForm((prev) => ({ ...prev, [field]: value as any }));
+    }
+  );
+
+  const handleSelectPreset = useLastCallback((id: string) => {
+    const p = presets.find((x) => x.id === id);
+    if (!p) return;
+    setActivePresetId(id);
+    setPresetForm({
+      config_name: p.configName,
+      priority_fee: p.priorityFee.toString(),
+      slippage_percentage: p.slippagePercentage.toString(),
+      is_mev: p.isMev,
+      is_turbo: p.isTurbo,
+      jito_bribe_amount: p.jitoBribeAmount.toString(),
+    });
+  });
+
+  const handleSavePreset = useLastCallback(async () => {
+    if (!currentUserId) return;
+    const payloadCommon = {
+      config_name: presetForm.config_name,
+      priority_fee: Number(presetForm.priority_fee),
+      slippage_percentage: Number(presetForm.slippage_percentage),
+      is_mev: !!presetForm.is_mev,
+      is_turbo: !!presetForm.is_turbo,
+      jito_bribe_amount: Number(presetForm.jito_bribe_amount),
+    };
+    try {
+      let saved: UserPresetConfig;
+      if (activePresetId) {
+        saved = await updateUserPreset(activePresetId, {
+          telegramId: currentUserId,
+          ...payloadCommon,
+        });
+      } else {
+        saved = await createUserPreset({
+          telegramId: currentUserId,
+          ...payloadCommon,
+        });
+      }
+      // refresh list
+      const data = await getUserPresets(currentUserId);
+      setPresets(data);
+      setActivePresetId(saved.id);
+      console.log("Preset saved", saved);
+    } catch (e) {
+      console.error("Failed to save preset", e);
+    }
+  });
+
   const handleBuySwap = useLastCallback(async () => {
     if (!currentUserId || !selectedMintAddress) {
       console.error("Missing required data for buy swap:", {
@@ -253,10 +376,16 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     setIsSwapLoading(true);
 
     try {
+      // Get active preset ID based on selected pool tab
+      const activePreset = presets.find(
+        (p, index) => selectedPoolTab === `P${index + 1}`
+      );
+
       const swapRequest: BuySwapRequest = {
         telegramUserId: currentUserId,
         inputAmount: amount,
         outputMintAddress: selectedMintAddress,
+        presetId: activePreset?.id,
       };
 
       console.log("Executing buy swap:", swapRequest);
@@ -333,10 +462,16 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     setIsSwapLoading(true);
 
     try {
+      // Get active preset ID based on selected pool tab
+      const activePreset = presets.find(
+        (p, index) => selectedPoolTab === `P${index + 1}`
+      );
+
       const swapRequest: SellSwapRequest = {
         telegramUserId: currentUserId,
         inputAmount: amount,
         inputMintAddress: selectedMintAddress,
+        presetId: activePreset?.id,
       };
 
       console.log("Executing sell swap:", swapRequest);
@@ -717,30 +852,6 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                       >
                         1
                       </button>
-                      <button className="input-button edit-button">
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="m18.5 2.5 a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
                     </div>
                   ) : (
                     <div className="percentage-buttons">
@@ -959,8 +1070,8 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                   </div>
                 )}
 
-                <div className="trade-stats">
-                  <div className="trade-stat">
+                <div className="preset-stats">
+                  <div className="preset-stat">
                     <svg
                       width="16"
                       height="16"
@@ -969,21 +1080,44 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                       xmlns="http://www.w3.org/2000/svg"
                     >
                       <path
-                        d="M14 11V8C14 6.34 12.66 5 11 5H4C2.34 5 1 6.34 1 8V11C1 12.66 2.34 14 4 14H6L8 17H10L8 14H11C12.66 14 14 12.66 14 11Z"
+                        d="M3 20V8a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12"
                         stroke="currentColor"
                         strokeWidth="2"
-                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                       />
                       <path
-                        d="M21 16V19C21 20.1 20.1 21 19 21H16C14.9 21 14 20.1 14 19V16C14 14.9 14.9 14 16 14H19C20.1 14 21 14.9 21 16Z"
+                        d="M13 10h5a2 2 0 0 1 2 2v6"
                         stroke="currentColor"
                         strokeWidth="2"
-                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M18 18a1 1 0 1 0 2 0 1 1 0 1 0-2 0"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M5 10h4"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                       />
                     </svg>
-                    <span className="trade-stat-value">0.01</span>
+                    <span className="preset-stat-value">
+                      {(() => {
+                        const activePreset = presets.find(
+                          (p, index) => selectedPoolTab === `P${index + 1}`
+                        );
+                        return activePreset ? activePreset.priorityFee : "1,000,000";
+                      })()}
+                    </span>
                   </div>
-                  <div className="trade-stat">
+                  <div className="preset-stat">
                     <svg
                       width="16"
                       height="16"
@@ -991,27 +1125,25 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                       fill="none"
                       xmlns="http://www.w3.org/2000/svg"
                     >
-                      <circle
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
                       <path
-                        d="M16 8L8 16"
+                        d="M12 2v20m8-10H4"
                         stroke="currentColor"
                         strokeWidth="2"
-                      />
-                      <path
-                        d="M8 8H16V16"
-                        stroke="currentColor"
-                        strokeWidth="2"
+                        strokeLinecap="round"
                       />
                     </svg>
-                    <span className="trade-stat-value">30%</span>
+                    <span className="preset-stat-value">
+                      {(() => {
+                        const activePreset = presets.find(
+                          (p, index) => selectedPoolTab === `P${index + 1}`
+                        );
+                        return activePreset
+                          ? `${activePreset.slippagePercentage}%`
+                          : "0.5%";
+                      })()}
+                    </span>
                   </div>
-                  <div className="trade-stat">
+                  <div className="preset-stat">
                     <svg
                       width="16"
                       height="16"
@@ -1020,13 +1152,77 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                       xmlns="http://www.w3.org/2000/svg"
                     >
                       <path
-                        d="M7 10V12C7 13.1 7.9 14 9 14H12V17L17 12L12 7V10H7Z"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        fill="none"
+                        d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                        fill="currentColor"
                       />
                     </svg>
-                    <span className="trade-stat-value">0.01</span>
+                    <span className="preset-stat-value">
+                      {(() => {
+                        const activePreset = presets.find(
+                          (p, index) => selectedPoolTab === `P${index + 1}`
+                        );
+                        return activePreset
+                          ? activePreset.jitoBribeAmount
+                          : "0";
+                      })()}
+                    </span>
+                  </div>
+                  <div className="preset-stat">
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path d="M12 2L8 6h8l-4-4z" fill="currentColor" />
+                      <rect
+                        x="10"
+                        y="6"
+                        width="4"
+                        height="12"
+                        fill="currentColor"
+                      />
+                      <path d="M8 18h8v2H8v-2z" fill="currentColor" />
+                    </svg>
+                    <span className="preset-stat-value">
+                      {(() => {
+                        const activePreset = presets.find(
+                          (p, index) => selectedPoolTab === `P${index + 1}`
+                        );
+                        return activePreset
+                          ? activePreset.isMev
+                            ? "ON"
+                            : "OFF"
+                          : "OFF";
+                      })()}
+                    </span>
+                  </div>
+                  <div className="preset-stat">
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                    <span className="preset-stat-value">
+                      {(() => {
+                        const activePreset = presets.find(
+                          (p, index) => selectedPoolTab === `P${index + 1}`
+                        );
+                        return activePreset
+                          ? activePreset.isTurbo
+                            ? "ON"
+                            : "OFF"
+                          : "OFF";
+                      })()}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1036,31 +1232,366 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
             <div className="trade-section">
               <div className="trade-section-content">
                 <div className="pools-tabs">
+                  {presets.map((preset, index) => (
+                    <button
+                      key={preset.id}
+                      className={`pool-tab ${
+                        selectedPoolTab === `P${index + 1}`
+                          ? "pool-tab-active"
+                          : ""
+                      }`}
+                      onClick={() => {
+                        setSelectedPoolTab(
+                          `P${index + 1}` as "P1" | "P2" | "P3"
+                        );
+                        // Apply preset settings to trading form
+                        console.log("Applying preset:", preset);
+                        // You can add logic here to apply preset settings to trading inputs
+                      }}
+                    >
+                      {preset.configName}
+                    </button>
+                  ))}
+                  {/* Show "No Presets" if no presets loaded */}
+                  {presets.length === 0 && (
+                    <button className="pool-tab pool-tab-active" disabled>
+                      No Presets
+                    </button>
+                  )}
                   <button
-                    className={`pool-tab ${
-                      selectedPoolTab === "P1" ? "pool-tab-active" : ""
-                    }`}
-                    onClick={() => setSelectedPoolTab("P1")}
+                    className="input-button edit-button"
+                    onClick={handleToggleEditPresets}
                   >
-                    P1
-                  </button>
-                  <button
-                    className={`pool-tab ${
-                      selectedPoolTab === "P2" ? "pool-tab-active" : ""
-                    }`}
-                    onClick={() => setSelectedPoolTab("P2")}
-                  >
-                    P2
-                  </button>
-                  <button
-                    className={`pool-tab ${
-                      selectedPoolTab === "P3" ? "pool-tab-active" : ""
-                    }`}
-                    onClick={() => setSelectedPoolTab("P3")}
-                  >
-                    P3
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="m18.5 2.5 a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
                   </button>
                 </div>
+
+                {isEditingPresets && (
+                  <div className="preset-editor">
+                    <button
+                      className="preset-close"
+                      onClick={handleToggleEditPresets}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M18 6L6 18"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M6 6l12 12"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                    <div className="preset-tabs">
+                      {presets.map((p) => (
+                        <button
+                          key={p.id}
+                          className={`preset-tab ${
+                            activePresetId === p.id ? "preset-tab-active" : ""
+                          }`}
+                          onClick={() => handleSelectPreset(p.id)}
+                        >
+                          {p.configName}
+                        </button>
+                      ))}
+                      {presets.length < 3 && (
+                        <button
+                          className={`preset-tab ${
+                            !activePresetId ? "preset-tab-active" : ""
+                          }`}
+                          onClick={() => {
+                            setActivePresetId(undefined);
+                            setPresetForm({
+                              config_name: "",
+                              priority_fee: "0",
+                              slippage_percentage: "0",
+                              is_mev: false,
+                              is_turbo: false,
+                              jito_bribe_amount: "0",
+                            });
+                          }}
+                        >
+                          New
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="preset-form">
+                      <div className="preset-field">
+                        <label className="preset-label">
+                          Preset name *
+                          <span className="char-count">
+                            {10 - presetForm.config_name.length} characters
+                            remaining
+                          </span>
+                        </label>
+                        <input
+                          type="text"
+                          className="preset-input"
+                          value={presetForm.config_name}
+                          onChange={(e) =>
+                            handlePresetFieldChange(
+                              "config_name",
+                              e.target.value.slice(0, 10)
+                            )
+                          }
+                        />
+                      </div>
+
+                      <div className="preset-field">
+                        <label className="preset-label">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                          >
+                            <path
+                              d="M12 2L8 6h3v6h2V6h3l-4-4z"
+                              fill="currentColor"
+                            />
+                            <path d="M8 18h8v2H8v-2z" fill="currentColor" />
+                          </svg>
+                          Buy priority fee *
+                        </label>
+                        <div className="preset-input-with-dropdown">
+                          <input
+                            type="text"
+                            className="preset-input"
+                            value={presetForm.priority_fee}
+                            onChange={(e) =>
+                              handlePresetFieldChange(
+                                "priority_fee",
+                                e.target.value
+                              )
+                            }
+                            placeholder="Text"
+                          />
+                          <button className="preset-dropdown">
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                            >
+                              <path
+                                d="M6 9l6 6 6-6"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="preset-field">
+                        <label className="preset-label">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                          >
+                            <path
+                              d="M12 2v20m8-10H4"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          Buy Slippage *
+                        </label>
+                        <div className="preset-input-with-unit">
+                          <input
+                            type="number"
+                            className="preset-input"
+                            value={presetForm.slippage_percentage}
+                            onChange={(e) =>
+                              handlePresetFieldChange(
+                                "slippage_percentage",
+                                e.target.value
+                              )
+                            }
+                          />
+                          <span className="preset-unit">%</span>
+                        </div>
+                      </div>
+
+                      <div className="preset-field">
+                        <div className="preset-toggle-section">
+                          <div className="preset-toggle-info">
+                            <h4>MEV reduction</h4>
+                            <p>Activate to prevent MEV on transactions</p>
+                          </div>
+                          <button
+                            className={`preset-toggle ${
+                              presetForm.is_mev ? "preset-toggle-active" : ""
+                            }`}
+                            onClick={() =>
+                              handlePresetFieldChange(
+                                "is_mev",
+                                !presetForm.is_mev
+                              )
+                            }
+                          >
+                            <div className="preset-toggle-slider">
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                              >
+                                <path
+                                  d="M12 2L8 6h8l-4-4z"
+                                  fill="currentColor"
+                                />
+                                <rect
+                                  x="10"
+                                  y="6"
+                                  width="4"
+                                  height="12"
+                                  fill="currentColor"
+                                />
+                                <path d="M8 18h8v2H8v-2z" fill="currentColor" />
+                              </svg>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="preset-field">
+                        <label className="preset-label">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                          >
+                            <path
+                              d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                          Buy Bribe
+                        </label>
+                        <p className="preset-description">
+                          minimum 0.001 sol bribe required for successful jito
+                          transaction
+                        </p>
+                        <div className="preset-input-with-dropdown">
+                          <input
+                            type="text"
+                            className="preset-input"
+                            value={presetForm.jito_bribe_amount}
+                            onChange={(e) =>
+                              handlePresetFieldChange(
+                                "jito_bribe_amount",
+                                e.target.value
+                              )
+                            }
+                            placeholder="min. 0.001"
+                          />
+                          <button className="preset-dropdown">
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                            >
+                              <path
+                                d="M6 9l6 6 6-6"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="preset-field">
+                        <div className="preset-toggle-section">
+                          <div className="preset-toggle-info">
+                            <h4>Turbo mode</h4>
+                            <p>
+                              Turbo transactions get sent to top validators,
+                              giving you the best chance of success
+                            </p>
+                          </div>
+                          <button
+                            className={`preset-toggle ${
+                              presetForm.is_turbo ? "preset-toggle-active" : ""
+                            }`}
+                            onClick={() =>
+                              handlePresetFieldChange(
+                                "is_turbo",
+                                !presetForm.is_turbo
+                              )
+                            }
+                          >
+                            <div className="preset-toggle-slider">
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                              >
+                                <path
+                                  d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"
+                                  fill="currentColor"
+                                />
+                              </svg>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                      <button
+                        className="preset-save-button"
+                        onClick={handleSavePreset}
+                      >
+                        Save Preset
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="token-metrics">
                   <div className="token-metric">
