@@ -10,7 +10,7 @@
 	}
 }
 
-:{$PORT:3000} {
+:4000 {
 	log {
 		format json
 	}
