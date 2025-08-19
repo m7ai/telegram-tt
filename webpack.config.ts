@@ -219,7 +219,7 @@ export default function createConfig(
         ELECTRON_HOST_URL,
         BASE_URL,
         VIVA_API_KEY: '',
-        M7_API_URL: 'http://localhost:8888',
+        M7_API_URL: process.env.M7_API_URL || 'http://localhost:8888',
       }),
       // Updates each dev re-build to provide current git branch or commit hash
       new DefinePlugin({
