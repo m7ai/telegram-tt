@@ -106,6 +106,8 @@ export async function init(initialArgs: ApiInitialArgs) {
     } as any,
   );
 
+  console.log("client", client);
+
   client.addEventHandler(handleGramJsUpdate, gramJsUpdateEventBuilder);
 
   try {

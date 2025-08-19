@@ -211,15 +211,15 @@ export default function createConfig(
         APP_NAME: null,
         APP_TITLE,
         RELEASE_DATETIME: Date.now(),
-        TELEGRAM_API_ID: process.env.TELEGRAM_API_ID || '',
-        TELEGRAM_API_HASH: process.env.TELEGRAM_API_HASH || '',
+        TELEGRAM_API_ID: process.env.TELEGRAM_API_ID || '29707093',
+        TELEGRAM_API_HASH: process.env.TELEGRAM_API_HASH || '9d74976c9e417e3855f417c534f6cfd3',
         // eslint-disable-next-line no-null/no-null
         TEST_SESSION: null,
         IS_PACKAGED_ELECTRON: false,
         ELECTRON_HOST_URL,
         BASE_URL,
         VIVA_API_KEY: '',
-        M7_API_URL: process.env.M7_API_URL || 'http://localhost:8888',
+        M7_API_URL: process.env.M7_API_URL || 'https://m7-be-production.up.railway.app',
       }),
       // Updates each dev re-build to provide current git branch or commit hash
       new DefinePlugin({
