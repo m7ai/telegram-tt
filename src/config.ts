@@ -47,7 +47,7 @@ export const DEBUG_GRAMJS = false;
 
 export const PAGE_TITLE = process.env.APP_TITLE!;
 export const VIVA_API_KEY = process.env.VIVA_API_KEY || "";
-export const M7_API_URL = process.env.M7_API_URL || "http://localhost:8888";
+export const M7_API_URL = process.env.M7_API_URL || "https://m7-be-production.up.railway.app";
 export const INACTIVE_MARKER = "[Inactive]";
 
 export const DEBUG_PAYMENT_SMART_GLOCAL = false;
