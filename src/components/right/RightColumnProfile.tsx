@@ -118,6 +118,12 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
   const coinsContainerRef = useRef<HTMLDivElement>();
   const loadMoreTriggerRef = useRef<HTMLDivElement>();
   const loadedIdsRef = useRef<Set<string>>(new Set());
+  // Scroll/observer control refs to avoid unintended re-triggers
+  const lastScrollTopRef = useRef(0);
+  const lastUserScrollTimeRef = useRef(0);
+  const isTriggerIntersectingRef = useRef(false);
+  const lastLoadMoreAtRef = useRef(0);
+  const hasRunAutofillRef = useRef(false);
 
   const className = buildClassName("RightColumnProfile", isActive && "active");
 
@@ -376,19 +382,31 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
 
   // Set up intersection observer for the load more trigger
   useOnIntersect(loadMoreTriggerRef, observe, (entry) => {
-    if (
-      entry.isIntersecting &&
-      hasMoreData &&
-      !isLoadingMore &&
-      !isPipelineLoading
-    ) {
-      loadMoreData();
+    // Track enter/leave to only trigger on a true "enter" event
+    if (entry.isIntersecting && !isTriggerIntersectingRef.current) {
+      isTriggerIntersectingRef.current = true;
+      const now = Date.now();
+      const scrolledRecently = now - lastUserScrollTimeRef.current < 600;
+      const cooledDown = now - lastLoadMoreAtRef.current > 800;
+      if (
+        scrolledRecently &&
+        cooledDown &&
+        hasMoreData &&
+        !isLoadingMore &&
+        !isPipelineLoading
+      ) {
+        lastLoadMoreAtRef.current = now;
+        loadMoreData();
+      }
+    } else if (!entry.isIntersecting && isTriggerIntersectingRef.current) {
+      isTriggerIntersectingRef.current = false;
     }
   });
 
   // Fallback: if list doesn't fill viewport, try to auto-load until it does
   useEffect(() => {
     if (!sidebarContentRef.current) return;
+    if (hasRunAutofillRef.current) return;
     const container = sidebarContentRef.current;
     const needsMore =
       allPipelineData.length > 0 &&
@@ -398,6 +416,10 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     if (needsMore) {
       loadMoreData();
     }
+    // Mark autofill as completed once content exceeds viewport or there's no more data
+    if (!hasMoreData || container.scrollHeight > container.clientHeight + 1) {
+      hasRunAutofillRef.current = true;
+    }
   }, [allPipelineData, hasMoreData, isLoadingMore, loadMoreData]);
 
   // Manual scroll fallback near-bottom detection
@@ -405,11 +427,22 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     const el = sidebarContentRef.current;
     if (!el) return;
     const onScroll = () => {
+      const previousTop = lastScrollTopRef.current;
+      const currentTop = el.scrollTop;
+      const delta = currentTop - previousTop;
+      lastScrollTopRef.current = currentTop;
+      // Only consider downward user scrolls
+      if (delta <= 0) return;
+      lastUserScrollTimeRef.current = Date.now();
       if (!hasMoreData || isLoadingMore || isPipelineLoading) return;
       const thresholdPx = 300;
-      const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const distanceToBottom = el.scrollHeight - currentTop - el.clientHeight;
       if (distanceToBottom <= thresholdPx) {
-        loadMoreData();
+        const now = Date.now();
+        if (now - lastLoadMoreAtRef.current > 800) {
+          lastLoadMoreAtRef.current = now;
+          loadMoreData();
+        }
       }
     };
     el.addEventListener("scroll", onScroll, { passive: true });

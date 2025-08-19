@@ -120,23 +120,22 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
       const textString =
         typeof messageText === "string" ? messageText : messageText?.text || "";
 
+      // Sanitize hidden zero-width characters that can break regex matching
+      const cleanTextString = textString.replace(/[\u200B-\u200D\uFEFF]/g, "");
+
       // Look for potential base58 strings that could be Solana addresses
-      const potentialAddresses = textString.match(
+      const potentialAddresses = cleanTextString.match(
         /[1-9A-HJ-NP-Za-km-z]{32,44}/g
       );
 
       if (potentialAddresses) {
         potentialAddresses.forEach((address: string) => {
           try {
-            // Validate using Solana's PublicKey class
-            const publicKey = new PublicKey(address);
-            if (PublicKey.isOnCurve(publicKey)) {
-              console.log("[MINT ADDRESS FOUND]", {
-                address,
-                telegramChatId: chatId,
-                messageId: id,
-              });
-            }
+            // Consider valid if it can be parsed as a PublicKey (includes PDAs)
+            // Note: PDAs are intentionally off-curve; do not filter by curve
+            // This will throw if the address is invalid
+            // eslint-disable-next-line no-new
+            new PublicKey(address);
           } catch (error) {
             // Invalid address, ignore
           }
@@ -147,39 +146,35 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
       if (potentialAddresses) {
         potentialAddresses.forEach(async (address: string) => {
           try {
-            // Validate using Solana's PublicKey class
-            const publicKey = new PublicKey(address);
-            if (PublicKey.isOnCurve(publicKey)) {
-              console.log("MINT ADDRESS FOUND", address);
-              // Call pipeline API to store the data
-              try {
-                const response = await axios.post(
-                  `${M7_API_URL}/pipeline/store`,
-                  {
-                    chatId: String(chatId),
-                    messageId: String(id),
-                    telegramUserId: String(global.currentUserId),
-                    text:
-                      typeof messageText === "string"
-                        ? messageText
-                        : messageText?.text || "",
-                    mintAddress: address,
+            // Consider valid if it can be parsed as a PublicKey (includes PDAs)
+            // eslint-disable-next-line no-new
+            new PublicKey(address);
+            // Call pipeline API to store the data
+            try {
+              const response = await axios.post(
+                `${M7_API_URL}/pipeline/store`,
+                {
+                  chatId: String(chatId),
+                  messageId: String(id),
+                  telegramUserId: String(global.currentUserId),
+                  text:
+                    typeof messageText === "string"
+                      ? messageText
+                      : messageText?.text || "",
+                  mintAddress: address,
+                },
+                {
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-api-key": VIVA_API_KEY,
                   },
-                  {
-                    headers: {
-                      "Content-Type": "application/json",
-                      "x-api-key": VIVA_API_KEY,
-                    },
-                  }
-                );
+                }
+              );
 
-                console.log("[PIPELINE] Successfully stored:", response.data);
-
-                // Trigger refresh of pipeline data in the UI
-                actions.refreshPipelineData({ tabId: getCurrentTabId() });
-              } catch (apiError) {
-                console.error("[PIPELINE] API call failed:", apiError);
-              }
+              // Trigger refresh of pipeline data in the UI
+              actions.refreshPipelineData({ tabId: getCurrentTabId() });
+            } catch (apiError) {
+              console.error("[PIPELINE] API call failed:", apiError);
             }
           } catch (error) {
             // Invalid address, ignore
