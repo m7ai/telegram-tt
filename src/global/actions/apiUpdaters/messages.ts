@@ -114,83 +114,77 @@ addActionHandler("apiUpdate", (global, actions, update): ActionReturnType => {
       const { chatId, id, message, shouldForceReply, wasDrafted, poll } =
         update;
 
-      console.log("newMessage", update);
+      const messageText = getMessageText(message as ApiMessage);
 
-      if (DEBUG) {
-        const messageText = getMessageText(message as ApiMessage);
+      // Check for potential Solana addresses (mint addresses)
+      const textString =
+        typeof messageText === "string" ? messageText : messageText?.text || "";
 
-        // Check for potential Solana addresses (mint addresses)
-        const textString =
-          typeof messageText === "string"
-            ? messageText
-            : messageText?.text || "";
+      // Look for potential base58 strings that could be Solana addresses
+      const potentialAddresses = textString.match(
+        /[1-9A-HJ-NP-Za-km-z]{32,44}/g
+      );
 
-        // Look for potential base58 strings that could be Solana addresses
-        const potentialAddresses = textString.match(
-          /[1-9A-HJ-NP-Za-km-z]{32,44}/g
-        );
-
-        if (potentialAddresses) {
-          potentialAddresses.forEach((address: string) => {
-            try {
-              // Validate using Solana's PublicKey class
-              const publicKey = new PublicKey(address);
-              if (PublicKey.isOnCurve(publicKey)) {
-                console.log("[MINT ADDRESS FOUND]", {
-                  address,
-                  telegramChatId: chatId,
-                  messageId: id,
-                });
-              }
-            } catch (error) {
-              // Invalid address, ignore
+      if (potentialAddresses) {
+        potentialAddresses.forEach((address: string) => {
+          try {
+            // Validate using Solana's PublicKey class
+            const publicKey = new PublicKey(address);
+            if (PublicKey.isOnCurve(publicKey)) {
+              console.log("[MINT ADDRESS FOUND]", {
+                address,
+                telegramChatId: chatId,
+                messageId: id,
+              });
             }
-          });
-        }
+          } catch (error) {
+            // Invalid address, ignore
+          }
+        });
+      }
 
-        // Store valid mint addresses in the pipeline
-        if (potentialAddresses) {
-          potentialAddresses.forEach(async (address: string) => {
-            try {
-              // Validate using Solana's PublicKey class
-              const publicKey = new PublicKey(address);
-              if (PublicKey.isOnCurve(publicKey)) {
-                console.log("MINT ADDRESS FOUND", address);
-                // Call pipeline API to store the data
-                try {
-                  const response = await axios.post(
-                    `${M7_API_URL}/pipeline/store`,
-                    {
-                      chatId: String(chatId),
-                      messageId: String(id),
-                      telegramUserId: String(global.currentUserId),
-                      text:
-                        typeof messageText === "string"
-                          ? messageText
-                          : messageText?.text || "",
-                      mintAddress: address,
+      // Store valid mint addresses in the pipeline
+      if (potentialAddresses) {
+        potentialAddresses.forEach(async (address: string) => {
+          try {
+            // Validate using Solana's PublicKey class
+            const publicKey = new PublicKey(address);
+            if (PublicKey.isOnCurve(publicKey)) {
+              console.log("MINT ADDRESS FOUND", address);
+              // Call pipeline API to store the data
+              try {
+                const response = await axios.post(
+                  `${M7_API_URL}/pipeline/store`,
+                  {
+                    chatId: String(chatId),
+                    messageId: String(id),
+                    telegramUserId: String(global.currentUserId),
+                    text:
+                      typeof messageText === "string"
+                        ? messageText
+                        : messageText?.text || "",
+                    mintAddress: address,
+                  },
+                  {
+                    headers: {
+                      "Content-Type": "application/json",
+                      "x-api-key": VIVA_API_KEY,
                     },
-                    {
-                      headers: {
-                        "Content-Type": "application/json",
-                        "x-api-key": VIVA_API_KEY,
-                      },
-                    }
-                  );
+                  }
+                );
 
-                  console.log("[PIPELINE] Successfully stored:", response.data);
+                console.log("[PIPELINE] Successfully stored:", response.data);
 
-                  // Trigger refresh of pipeline data in the UI
-                  actions.refreshPipelineData({ tabId: getCurrentTabId() });
-                } catch (apiError) {
-                  console.error("[PIPELINE] API call failed:", apiError);
-                }
+                // Trigger refresh of pipeline data in the UI
+                actions.refreshPipelineData({ tabId: getCurrentTabId() });
+              } catch (apiError) {
+                console.error("[PIPELINE] API call failed:", apiError);
               }
-            } catch (error) {
-              // Invalid address, ignore
             }
-          });
-        }
+          } catch (error) {
+            // Invalid address, ignore
+          }
+        });
       }
       global = updateWithLocalMedia(global, chatId, id, message);
       global = updateListedAndViewportIds(
