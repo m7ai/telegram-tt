@@ -158,6 +158,15 @@ function onUpdateAuthorizationState<T extends GlobalState>(
   global = getGlobal();
 
   switch (authState) {
+    case "authorizationStateWaitPhoneNumber":
+      global = {
+        ...global,
+        authState: "authorizationStateWaitPhoneNumber",
+        authIsLoadingQrCode: false,
+        authQrCode: undefined,
+      };
+      setGlobal(global);
+      break;
     case "authorizationStateLoggingOut":
       void forceWebsync(false);
 
