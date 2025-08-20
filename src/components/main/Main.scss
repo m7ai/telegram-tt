@@ -3,7 +3,7 @@
   height: 100%;
   text-align: left;
 
-  @media (min-width: 1276px) {
+  @media (min-width: 926px) {
     position: relative;
   }
 
@@ -53,6 +53,17 @@
   height: 100%;
 
   background-color: var(--color-background);
+
+  /* Desktop/tablet: allow full collapse when left column is closed */
+  @media (min-width: 926px) {
+    transition: width var(--layer-transition);
+
+    #Main:not(.left-column-open) & {
+      width: 0 !important;
+      min-width: 0 !important;
+      max-width: 0 !important;
+    }
+  }
 
   @media (min-width: 926px) {
     --left-column-max-width: 40vw;
@@ -333,5 +344,24 @@
         right: 0;
       }
     }
+  }
+}
+
+/* Left column toggle buttons */
+#Main .left-column-toggle-button,
+#Main .left-column-collapse-button {
+  display: none;
+}
+
+@media (min-width: 926px) {
+  #Main .left-column-toggle-button,
+  #Main .left-column-collapse-button {
+    display: block;
+    position: fixed;
+    z-index: 1000;
+    left: 0.75rem;
+    bottom: 0.5rem;
+    box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(6px);
   }
 }

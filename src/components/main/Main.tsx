@@ -109,6 +109,8 @@ import SnapEffectContainer from "./visualEffects/SnapEffectContainer";
 import WaveContainer from "./visualEffects/WaveContainer";
 
 import "./Main.scss";
+import Button from "../ui/Button";
+import Icon from "../common/icons/Icon";
 
 export interface OwnProps {
   isMobile?: boolean;
@@ -634,6 +636,36 @@ const Main = ({
 
   return (
     <div ref={containerRef} id="Main" className={className}>
+      {/* Desktop toggle buttons for collapsing/expanding left column */}
+      {isLeftColumnOpen ? (
+        <Button
+          className="left-column-collapse-button"
+          size="smaller"
+          color="dark"
+          round
+          ariaLabel="Collapse left column"
+          onClick={(e) => {
+            e.preventDefault();
+            toggleLeftColumn();
+          }}
+        >
+          <Icon name="collapse" />
+        </Button>
+      ) : (
+        <Button
+          className="left-column-toggle-button"
+          size="smaller"
+          color="dark"
+          round
+          ariaLabel="Show left column"
+          onClick={(e) => {
+            e.preventDefault();
+            toggleLeftColumn();
+          }}
+        >
+          <Icon name="sidebar" />
+        </Button>
+      )}
       <LeftColumn ref={leftColumnRef} />
       <MiddleColumn leftColumnRef={leftColumnRef} isMobile={isMobile} />
       <RightColumn isMobile={isMobile} />
