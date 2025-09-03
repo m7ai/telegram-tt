@@ -281,6 +281,8 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
 
   // Add a refresh trigger for wallet balance
   const [walletRefreshTrigger, setWalletRefreshTrigger] = useState(0);
+  const [suppressBalanceLoading, setSuppressBalanceLoading] = useState(false);
+  const [suppressCountLoading, setSuppressCountLoading] = useState(false);
 
   // Create a refresh function that can be called from outside
   const refreshWalletBalance = () => {
@@ -313,7 +315,10 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
 
       console.log("🔄 Received refreshPipelineData event, refreshing data...");
       setLastRefreshTime(now);
+      setSuppressCountLoading(true);
+      setCurrentPage(1);
       setRefreshTrigger((prev) => prev + 1);
+      setSuppressBalanceLoading(true);
       setWalletRefreshTrigger((prev) => prev + 1);
     };
 
@@ -334,12 +339,33 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     error: walletError,
   } = useAsync(fetchWalletBalance, [currentUserId, walletRefreshTrigger]);
 
+  // When a refresh-triggered fetch completes, stop suppressing loading state
+  useEffect(() => {
+    if (suppressBalanceLoading && !isWalletLoading) {
+      setSuppressBalanceLoading(false);
+    }
+  }, [isWalletLoading, suppressBalanceLoading]);
+
+  // If any wallet refresh is triggered, suppress balance loading to keep last value visible
+  useEffect(() => {
+    if (walletRefreshTrigger > 0) {
+      setSuppressBalanceLoading(true);
+    }
+  }, [walletRefreshTrigger]);
+
   // Use async hook to fetch aggregated pipeline count
   const {
     result: countData,
     isLoading: isCountLoading,
     error: countError,
   } = useAsync(fetchAggregatedPipelineCount, [currentUserId, refreshTrigger]);
+
+  // When count refresh completes, stop suppressing its loading state
+  useEffect(() => {
+    if (suppressCountLoading && !isCountLoading) {
+      setSuppressCountLoading(false);
+    }
+  }, [isCountLoading, suppressCountLoading]);
 
   // Use async hook to fetch initial aggregated pipeline data
   const {
@@ -363,13 +389,13 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     }
   }, [initialPipelineData]);
 
-  // Reset accumulated data when user changes or refresh trigger changes
+  // Reset accumulated data when user changes
   useEffect(() => {
     setAllPipelineData([]);
     setCurrentPage(1);
     setHasMoreData(true);
     loadedIdsRef.current.clear();
-  }, [currentUserId, refreshTrigger]);
+  }, [currentUserId]);
 
   // Set up intersection observer for infinite scroll
   // Root should be the scrollable `.sidebar-content`, not the inner content
@@ -509,7 +535,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
           <div className="wallet-column">
             <span className="wallet-label">Wallet address</span>
             <div className="wallet-value-group">
-              {isWalletLoading ? (
+              {isWalletLoading && !suppressBalanceLoading ? (
                 <span className="wallet-address loading">Loading...</span>
               ) : walletError ? (
                 <span className="wallet-address error">
@@ -548,7 +574,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
           <div className="balance-column">
             <span className="balance-label">Balance</span>
             <div className="balance-value-group">
-              {isWalletLoading ? (
+              {isWalletLoading && !suppressBalanceLoading ? (
                 <span className="balance-amount loading">Loading...</span>
               ) : walletError ? (
                 <span className="balance-amount error">Error</span>
@@ -595,7 +621,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
           <div className="group-label" onClick={toggleCoinsVisibility}>
             <span>
               Scanned coins (
-              {isCountLoading
+              {isCountLoading && !suppressCountLoading
                 ? "..."
                 : countError
                 ? "0"
