@@ -184,4 +184,9 @@
       line-height: 1;
     }
   }
+
+  /* Hide the left main header when left column is 85px or narrower */
+  @container leftcol (max-width: 85px) {
+    display: none;
+  }
 }

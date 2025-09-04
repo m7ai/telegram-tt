@@ -57,12 +57,14 @@ type TokenData = {
   holders?: number;
   website?: string;
   twitter?: string;
+  tokenCreatedAt?: string;
 };
 
 type AggregatedPipelineItem = {
   id: string;
   mintAddress: string;
   activeCount: number;
+  uniqueChatMentionsCount: number;
   createdAt: string;
   lastModifiedAt: string;
   tokenData?: TokenData;
@@ -88,6 +90,38 @@ type AggregatedPipelineCountResponse = {
   telegramUserId: string;
   count: number;
   message: string;
+};
+
+// Helper function to get the appropriate SVG icon based on active count value
+const getActiveCountIcon = (activeCount: number): string => {
+  if (activeCount >= 50) return "50+.svg";
+  if (activeCount >= 40) return "40-49.svg";
+  if (activeCount >= 30) return "30-39.svg";
+  if (activeCount >= 10) return "10-29.svg";
+  return "1-9.svg";
+};
+
+// Helper function to format time ago
+const formatTimeAgo = (dateString?: string): string => {
+  if (!dateString) return "";
+
+  const now = new Date();
+  const date = new Date(dateString);
+  const diffMs = now.getTime() - date.getTime();
+
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+
+  if (diffYears > 0) return `${diffYears}y`;
+  if (diffMonths > 0) return `${diffMonths}mo`;
+  if (diffDays > 0) return `${diffDays}d`;
+  if (diffHours > 0) return `${diffHours}h`;
+  if (diffMinutes > 0) return `${diffMinutes}m`;
+  return "now";
 };
 
 const RightColumnProfile: FC<OwnProps & StateProps> = ({
@@ -528,7 +562,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
       {/* Header Section - Following AppSidebar design */}
       <div className="sidebar-header">
         <div className="brand-section">
-          <span className="moonraker-brand-text">Moonraker</span>
+          <span className="moonraker-brand-text">Trench Scanner</span>
         </div>
 
         <div className="wallet-section">
@@ -718,6 +752,13 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
                                   ></rect>
                                   <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
                                 </svg>
+                                {item.tokenData?.tokenCreatedAt && (
+                                  <span className="token-created-at">
+                                    {formatTimeAgo(
+                                      item.tokenData.tokenCreatedAt
+                                    )}
+                                  </span>
+                                )}
                               </div>
                               <div className="coin-subtitle-row">
                                 <p className="coin-subtitle">
@@ -731,28 +772,30 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
                           <div className="coin-metrics">
                             <div className="metric-badge">
                               <img
-                                src="/svg/chat.svg"
-                                alt="chat"
+                                src={`/svg/main/dark/${getActiveCountIcon(
+                                  item.activeCount
+                                )}`}
+                                alt="active count"
                                 className="message-icon"
                                 width="14"
                                 height="14"
                               />
                               <span className="metric-value">
-                                {formatNumber(item.activeCount)}
+                                {item.activeCount}
                               </span>
                             </div>
-                            {/* <div className="metric-badge">
+                            <div className="metric-badge">
                               <img
-                                src="/svg/radar.svg"
-                                alt="radar"
-                                className="sparkles-icon"
-                                width="14"
-                                height="14"
+                                src="/svg/main/chat.svg"
+                                alt="unique chats"
+                                className="unique-chats-icon"
+                                width="18"
+                                height="18"
                               />
                               <span className="metric-value">
-                                {formatNumber(item.activeCount)}
+                                {item.uniqueChatMentionsCount}
                               </span>
-                            </div> */}
+                            </div>
                           </div>
                         </div>
 

@@ -133,11 +133,99 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     transactionMessage?: string;
     transactionLogs?: string[];
   } | null>(null);
+  const [isSyncingHoldings, setIsSyncingHoldings] = useState(false);
+  const syncingStartRef = useRef<number>(0);
 
   // Derived state for user holdings
   const userHoldings = useMemo(() => {
     return tokenMetadata?.userHoldings || 0;
   }, [tokenMetadata?.userHoldings]);
+
+  // Mounted ref for safe async updates
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Helper: refresh once and return whether holdings changed vs previous
+  const refreshHoldingsOnce = useLastCallback(
+    async (previousHoldings: number) => {
+      if (!selectedMintAddress || !currentUserId) return false;
+      try {
+        const data = await fetchTokenMetadata(
+          selectedMintAddress,
+          currentUserId
+        );
+        if (!isMountedRef.current) return false;
+        setTokenMetadata(data);
+        console.log("[TokenMetadata] Refreshed after swap:", data);
+        return (
+          typeof data?.userHoldings !== "undefined" &&
+          data.userHoldings !== previousHoldings
+        );
+      } catch (err) {
+        console.error("[TokenMetadata] Failed to refresh after swap:", err);
+        return false;
+      }
+    }
+  );
+
+  // Helper: syncing state with minimum visible duration
+  const startSyncing = useLastCallback(() => {
+    syncingStartRef.current = Date.now();
+    setIsSyncingHoldings(true);
+  });
+
+  const endSyncing = useLastCallback(async () => {
+    const minimumVisibleMs = 1000;
+    const elapsed = Date.now() - syncingStartRef.current;
+    if (elapsed < minimumVisibleMs) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, minimumVisibleMs - elapsed)
+      );
+    }
+    if (isMountedRef.current) {
+      setIsSyncingHoldings(false);
+    }
+  });
+
+  // Helper: poll up to 30s every 2s until holdings change
+  const pollForUpdatedHoldings = useLastCallback(
+    async (previousHoldings: number) => {
+      if (!selectedMintAddress || !currentUserId) return;
+      const maxDurationMs = 30000;
+      const intervalMs = 2000;
+      const startMs = Date.now();
+      startSyncing();
+      while (Date.now() - startMs < maxDurationMs && isMountedRef.current) {
+        try {
+          const data = await fetchTokenMetadata(
+            selectedMintAddress,
+            currentUserId
+          );
+          if (!isMountedRef.current) return;
+          if (
+            typeof data?.userHoldings !== "undefined" &&
+            data.userHoldings !== previousHoldings
+          ) {
+            setTokenMetadata(data);
+            console.log(
+              "[TokenMetadata] Updated after swap via polling:",
+              data
+            );
+            await endSyncing();
+            return;
+          }
+        } catch (err) {
+          console.error("[TokenMetadata] Polling error after swap:", err);
+        }
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
+      await endSyncing();
+    }
+  );
 
   // Image loading state
   const [logoLoadError, setLogoLoadError] = useState(false);
@@ -376,6 +464,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     setIsSwapLoading(true);
 
     try {
+      const previousHoldings = userHoldings;
       // Get active preset ID based on selected pool tab
       const activePreset = presets.find(
         (p, index) => selectedPoolTab === `P${index + 1}`
@@ -395,19 +484,16 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
       // Store the transaction ID for display
       setLastTransactionId(result.transactionId);
 
-      // Refresh token metadata to get updated token count
-      if (selectedMintAddress && currentUserId) {
-        fetchTokenMetadata(selectedMintAddress, currentUserId)
-          .then((data) => {
-            setTokenMetadata(data);
-            console.log("[TokenMetadata] Refreshed after buy swap:", data);
-          })
-          .catch((err) => {
-            console.error(
-              "[TokenMetadata] Failed to refresh after buy swap:",
-              err
-            );
-          });
+      // Switch from processing to syncing state and start balance refresh/polling
+      setIsSwapLoading(false);
+      startSyncing();
+
+      // Refresh once; if unchanged, poll up to 30s for update
+      const updated = await refreshHoldingsOnce(previousHoldings);
+      if (!updated) {
+        await pollForUpdatedHoldings(previousHoldings);
+      } else {
+        await endSyncing();
       }
 
       // Refresh wallet balance in profile
@@ -462,6 +548,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     setIsSwapLoading(true);
 
     try {
+      const previousHoldings = userHoldings;
       // Get active preset ID based on selected pool tab
       const activePreset = presets.find(
         (p, index) => selectedPoolTab === `P${index + 1}`
@@ -481,19 +568,16 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
       // Store the transaction ID for display
       setLastTransactionId(result.transactionId);
 
-      // Refresh token metadata to get updated token count
-      if (selectedMintAddress && currentUserId) {
-        fetchTokenMetadata(selectedMintAddress, currentUserId)
-          .then((data) => {
-            setTokenMetadata(data);
-            console.log("[TokenMetadata] Refreshed after sell swap:", data);
-          })
-          .catch((err) => {
-            console.error(
-              "[TokenMetadata] Failed to refresh after sell swap:",
-              err
-            );
-          });
+      // Switch from processing to syncing state and start balance refresh/polling
+      setIsSwapLoading(false);
+      startSyncing();
+
+      // Refresh once; if unchanged, poll up to 30s for update
+      const updated = await refreshHoldingsOnce(previousHoldings);
+      if (!updated) {
+        await pollForUpdatedHoldings(previousHoldings);
+      } else {
+        await endSyncing();
       }
 
       // Refresh wallet balance in profile
@@ -894,11 +978,13 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                 </div>
 
                 <button
-                  className={`buy-now-button ${isSwapLoading ? "loading" : ""}`}
+                  className={`buy-now-button ${
+                    isSwapLoading || isSyncingHoldings ? "loading" : ""
+                  }`}
                   onClick={handleSwap}
-                  disabled={isSwapLoading}
+                  disabled={isSwapLoading || isSyncingHoldings}
                 >
-                  {isSwapLoading ? (
+                  {isSwapLoading || isSyncingHoldings ? (
                     <>
                       <svg
                         className="loading-spinner"
@@ -911,7 +997,9 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                       >
                         <path d="M21 12a9 9 0 11-6.219-8.56" />
                       </svg>
-                      Processing...
+                      {isSwapLoading
+                        ? "Processing..."
+                        : "Syncing Token Holdings On Chain..."}
                     </>
                   ) : (
                     <>
@@ -1113,7 +1201,9 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                         const activePreset = presets.find(
                           (p, index) => selectedPoolTab === `P${index + 1}`
                         );
-                        return activePreset ? activePreset.priorityFee : "1,000,000";
+                        return activePreset
+                          ? activePreset.priorityFee
+                          : "1,000,000";
                       })()}
                     </span>
                   </div>
@@ -1386,7 +1476,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                             />
                             <path d="M8 18h8v2H8v-2z" fill="currentColor" />
                           </svg>
-                          Buy priority fee *
+                          priority fee *
                         </label>
                         <div className="preset-input-with-dropdown">
                           <input
@@ -1435,7 +1525,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                               strokeLinecap="round"
                             />
                           </svg>
-                          Buy Slippage *
+                          slippage *
                         </label>
                         <div className="preset-input-with-unit">
                           <input

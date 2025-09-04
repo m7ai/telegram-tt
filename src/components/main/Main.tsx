@@ -19,7 +19,12 @@ import type {
 import type { TabState } from "../../global/types";
 import { ElectronEvent } from "../../types/electron";
 
-import { BASE_EMOJI_KEYWORD_LANG, DEBUG, INACTIVE_MARKER } from "../../config";
+import {
+  BASE_EMOJI_KEYWORD_LANG,
+  DEBUG,
+  INACTIVE_MARKER,
+  M7_API_URL,
+} from "../../config";
 import { requestNextMutation } from "../../lib/fasterdom/fasterdom";
 import {
   selectCanAnimateInterface,
@@ -66,6 +71,8 @@ import useSyncEffect from "../../hooks/useSyncEffect";
 import useBackgroundMode from "../../hooks/window/useBackgroundMode";
 import useBeforeUnload from "../../hooks/window/useBeforeUnload";
 import { useFullscreenStatus } from "../../hooks/window/useFullscreen";
+import useAsync from "../../hooks/useAsync";
+import { formatNumber } from "../../util/formatNumber";
 
 import ActiveCallHeader from "../calls/ActiveCallHeader.async";
 import GroupCall from "../calls/group/GroupCall.async";
@@ -111,6 +118,11 @@ import WaveContainer from "./visualEffects/WaveContainer";
 import "./Main.scss";
 import Button from "../ui/Button";
 import Icon from "../common/icons/Icon";
+
+interface WalletData {
+  balance: number;
+  walletAddress?: string;
+}
 
 export interface OwnProps {
   isMobile?: boolean;
@@ -287,6 +299,47 @@ const Main = ({
   }
 
   const lang = useLang();
+
+  // Fetch wallet balance function
+  const fetchWalletBalance = useLastCallback(
+    async (): Promise<WalletData | undefined> => {
+      if (!currentUserId) {
+        return undefined;
+      }
+
+      try {
+        const response = await fetch(`${M7_API_URL}/user/get-balance`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            telegramUserId: currentUserId,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error("Failed to fetch wallet balance:", error);
+        throw error;
+      }
+    }
+  );
+
+  // Use async hook to fetch wallet data
+  const {
+    result: walletData,
+    isLoading: isWalletLoading,
+    error: walletError,
+  } = useAsync(fetchWalletBalance, [currentUserId]);
+
+  // Get display balance
+  const displayBalance = formatNumber(walletData?.balance);
 
   // Preload Calls bundle to initialize sounds for iOS
   useTimeout(() => {
@@ -636,6 +689,29 @@ const Main = ({
 
   return (
     <div ref={containerRef} id="Main" className={className}>
+      <div className="app-navbar" role="navigation" aria-label="Primary">
+        <div className="navbar-left">
+          <div className="brand">
+            <img className="brand-logo" src="/svg/Logo.svg" alt="M7" />
+          </div>
+        </div>
+        <div className="navbar-right">
+          <div className="balance" title="SOL balance">
+            {isWalletLoading ? (
+              <span className="balance-value">Loading...</span>
+            ) : walletError ? (
+              <span className="balance-value">Error</span>
+            ) : (
+              <span className="balance-value">{displayBalance}</span>
+            )}
+            <img
+              className="balance-icon"
+              src="/solana/Solana(Colored).svg"
+              alt="SOL"
+            />
+          </div>
+        </div>
+      </div>
       {/* Desktop toggle buttons for collapsing/expanding left column */}
       {isLeftColumnOpen ? (
         <Button

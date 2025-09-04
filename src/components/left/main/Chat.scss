@@ -451,4 +451,11 @@
       border-radius: 0 !important;
     }
   }
+
+  /* Hide info text when left column is narrower than 300px */
+  @container leftcol (max-width: 300px) {
+    .info {
+      display: none;
+    }
+  }
 }
