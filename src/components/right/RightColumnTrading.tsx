@@ -21,6 +21,7 @@ import type {
   HMTokenMetadata,
   M7TokenMetadataResponse,
 } from "../../hooks/hellomoon/hmApi";
+import { M7_API_URL } from "../../config";
 import {
   fetchMintAddressMetadata,
   fetchTokenMetadata,
@@ -29,6 +30,7 @@ import {
   type BuySwapRequest,
   type SellSwapRequest,
 } from "../../hooks/hellomoon/hmApi";
+import { formatNumber } from "../../util/formatNumber";
 import {
   getUserPresets,
   createUserPreset,
@@ -48,11 +50,12 @@ interface CoinData {
   subtitle: string;
   time: string;
   comments: string;
-  score: string;
+  score?: string;
   cap: string;
   holders: number;
   volume: string;
-  change: string;
+  price?: string;
+  change?: string;
 }
 
 type StateProps = {
@@ -143,11 +146,176 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
 
   // Mounted ref for safe async updates
   const isMountedRef = useRef(true);
+  const wsRef = useRef<WebSocket | null>(null);
+  const previousMintRef = useRef<string | undefined>(undefined);
+  const selectedMintRef = useRef<string | undefined>(undefined);
+  const [wsWalletAddress, setWsWalletAddress] = useState<string | undefined>(
+    undefined
+  );
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
     };
   }, []);
+
+  // Fetch wallet address for WS connection
+  useEffect(() => {
+    let aborted = false;
+    const fetchWallet = async () => {
+      if (!currentUserId) return;
+      try {
+        const res = await fetch(`${M7_API_URL}/user/get-balance`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ telegramUserId: currentUserId }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!aborted) setWsWalletAddress(data?.walletAddress);
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchWallet();
+    return () => {
+      aborted = true;
+    };
+  }, [currentUserId]);
+
+  // Keep a ref of the latest selectedMintAddress
+  useEffect(() => {
+    selectedMintRef.current = selectedMintAddress;
+  }, [selectedMintAddress]);
+
+  // WS connect and base handlers
+  useEffect(() => {
+    if (!isOpen || !wsWalletAddress) return;
+
+    // Close any existing socket before opening a new one
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch {}
+    }
+
+    const url = `wss://m7-api-production.up.railway.app/ws?wallet=${encodeURIComponent(
+      wsWalletAddress
+    )}`;
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      const mintToSubscribe = selectedMintRef.current;
+      if (!mintToSubscribe) return;
+      // Subscribe current mint on open
+      try {
+        ws.send(
+          JSON.stringify({
+            message: { TokenData: mintToSubscribe },
+            action: "Subscribe",
+          })
+        );
+        previousMintRef.current = mintToSubscribe;
+      } catch {}
+    };
+
+    ws.onmessage = (e: MessageEvent) => {
+      try {
+        const msg = JSON.parse(e.data);
+
+        if (msg?.messageType === "price" && msg?.data?.price) {
+          const msgAddress = msg?.data?.address || msg?.data?.mintAddress;
+          const currentMint = selectedMintRef.current;
+          if (!msgAddress || !currentMint || msgAddress !== currentMint) {
+            // Ignore price updates for other tokens
+            return;
+          }
+          setTokenMetadata((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              tokenData: {
+                ...prev.tokenData,
+                price: String(msg.data.price),
+                priceUsd:
+                  msg.data.priceUsd !== undefined
+                    ? String(msg.data.priceUsd)
+                    : prev.tokenData?.priceUsd,
+                // Optionally sync other fields if present
+                marketCap: msg.data.marketCap ?? prev.tokenData?.marketCap,
+                liquidity: msg.data.liquidity ?? prev.tokenData?.liquidity,
+                curveProgress:
+                  msg.data.curveProgress ?? prev.tokenData?.curveProgress,
+                solReserves:
+                  msg.data.solReserves ?? prev.tokenData?.solReserves,
+                tokenReserves:
+                  msg.data.tokenReserves ?? prev.tokenData?.tokenReserves,
+              },
+            } as M7TokenMetadataResponse;
+          });
+        }
+      } catch {
+        // ignore malformed messages
+      }
+    };
+
+    ws.onerror = (err) => {
+      console.error("[WS] Error", err);
+      // noop; UI already handles error states for chart/metadata
+    };
+
+    ws.onclose = () => {
+      // clear ref on close
+      if (wsRef.current === ws) {
+        wsRef.current = null;
+      }
+    };
+
+    return () => {
+      try {
+        // Best-effort unsubscribe before closing
+        if (ws.readyState === WebSocket.OPEN && previousMintRef.current) {
+          ws.send(
+            JSON.stringify({
+              message: { TokenData: previousMintRef.current },
+              action: "Unsubscribe",
+            })
+          );
+        }
+      } catch {}
+      try {
+        ws.close();
+      } catch {}
+    };
+  }, [isOpen, wsWalletAddress]);
+
+  // When selectedMintAddress changes, re-subscribe on the existing WS
+  useEffect(() => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!selectedMintAddress) return;
+
+    try {
+      if (previousMintRef.current) {
+        ws.send(
+          JSON.stringify({
+            message: { TokenData: previousMintRef.current },
+            action: "Unsubscribe",
+          })
+        );
+      }
+    } catch {}
+
+    try {
+      ws.send(
+        JSON.stringify({
+          message: { TokenData: selectedMintAddress },
+          action: "Subscribe",
+        })
+      );
+      previousMintRef.current = selectedMintAddress;
+    } catch {}
+  }, [selectedMintAddress]);
 
   // Helper: refresh once and return whether holdings changed vs previous
   const refreshHoldingsOnce = useLastCallback(
@@ -160,7 +328,6 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
         );
         if (!isMountedRef.current) return false;
         setTokenMetadata(data);
-        console.log("[TokenMetadata] Refreshed after swap:", data);
         return (
           typeof data?.userHoldings !== "undefined" &&
           data.userHoldings !== previousHoldings
@@ -211,10 +378,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
             data.userHoldings !== previousHoldings
           ) {
             setTokenMetadata(data);
-            console.log(
-              "[TokenMetadata] Updated after swap via polling:",
-              data
-            );
+
             await endSyncing();
             return;
           }
@@ -247,7 +411,6 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
         setTokenMetadata(data);
         setIsLoadingTokenMetadata(false);
         setLogoLoadError(false);
-        console.log("[TokenMetadata] Successfully fetched:", data);
       })
       .catch((err) => {
         console.error("[TokenMetadata] Failed to load token metadata", err);
@@ -267,7 +430,6 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
 
     fetchMintAddressMetadata(mintAddress)
       .then((tokenData) => {
-        console.log("[TVChart] Token data:", tokenData);
         setChartTokenMetadata(tokenData);
         setIsLoadingChart(false);
       })
@@ -283,7 +445,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     return (
       <TVChart
         tokenMetadata={chartTokenMetadata}
-        settings={{ chartType: "price", currency: "usd" }}
+        settings={{ chartType: "price", currency: "usd", wsWalletAddress }}
       />
     );
   }, [chartTokenMetadata]);
@@ -347,7 +509,6 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
       getUserPresets(currentUserId)
         .then((data) => {
           setPresets(data);
-          console.log("Loaded presets on mount:", data);
         })
         .catch((err) => {
           console.error("Failed to load presets on mount:", err);
@@ -437,7 +598,6 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
       const data = await getUserPresets(currentUserId);
       setPresets(data);
       setActivePresetId(saved.id);
-      console.log("Preset saved", saved);
     } catch (e) {
       console.error("Failed to save preset", e);
     }
@@ -749,9 +909,11 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                         height="10"
                       />
                       <span className="stat-value">
-                        {tokenMetadata?.tokenData?.liquidity?.toLocaleString() ||
-                          selectedCoin?.cap ||
-                          "N/A"}
+                        {tokenMetadata?.tokenData?.liquidity
+                          ? `$${formatNumber(
+                              tokenMetadata.tokenData.liquidity
+                            )}`
+                          : selectedCoin?.cap || "N/A"}
                       </span>
                     </div>
 
@@ -765,37 +927,21 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                           height="10"
                         />
                         <span className="stat-value">
-                          {tokenMetadata?.tokenData?.holders?.toLocaleString() ||
-                            selectedCoin?.holders?.toLocaleString() ||
-                            "N/A"}
+                          {tokenMetadata?.tokenData?.holders !== undefined
+                            ? formatNumber(tokenMetadata.tokenData.holders)
+                            : selectedCoin?.holders?.toLocaleString() || "N/A"}
                         </span>
                       </div>
                       <span className="stat-separator">|</span>
                       <div className="stat-item">
                         $
                         <span className="stat-value">
-                          {tokenMetadata?.tokenData?.price
-                            ? parseFloat(tokenMetadata.tokenData.price).toFixed(
-                                6
-                              )
-                            : selectedCoin?.score || "N/A"}
+                          {tokenMetadata?.tokenData?.priceUsd
+                            ? formatNumber(tokenMetadata.tokenData.priceUsd)
+                            : selectedCoin?.price || "N/A"}
                         </span>
                       </div>
                       <span className="stat-separator">|</span>
-                      {/* <div className="stat-item">
-                        <img
-                          src="/svg/chart.svg"
-                          alt="volume"
-                          className="stat-icon"
-                          width="11"
-                          height="10"
-                        />
-                        <span className="stat-value">
-                          {tokenMetadata?.tokenData?.marketCap?.toLocaleString() ||
-                            selectedCoin?.volume ||
-                            "N/A"}
-                        </span>
-                      </div> */}
                       <span className="stat-separator">|</span>
                       <div className="stat-item mc-group">
                         <span className="stat-value">MC</span>
@@ -807,9 +953,11 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                           height="10"
                         />
                         <span className="stat-value change-value">
-                          {tokenMetadata?.tokenData?.marketCap?.toLocaleString() ||
-                            selectedCoin?.change ||
-                            "N/A"}
+                          {tokenMetadata?.tokenData?.marketCap
+                            ? `$${formatNumber(
+                                tokenMetadata.tokenData.marketCap
+                              )}`
+                            : selectedCoin?.cap || "N/A"}
                         </span>
                       </div>
                     </div>
@@ -1335,7 +1483,6 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                           `P${index + 1}` as "P1" | "P2" | "P3"
                         );
                         // Apply preset settings to trading form
-                        console.log("Applying preset:", preset);
                         // You can add logic here to apply preset settings to trading inputs
                       }}
                     >
@@ -1687,21 +1834,16 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                   <div className="token-metric">
                     <span className="token-metric-label">Price</span>
                     <span className="token-metric-value">
-                      {tokenMetadata?.tokenData?.price
-                        ? `$${parseFloat(tokenMetadata.tokenData.price).toFixed(
-                            6
-                          )}`
-                        : "N/A"}
+                      {tokenMetadata?.tokenData?.priceUsd
+                        ? `$${formatNumber(tokenMetadata.tokenData.priceUsd)}`
+                        : selectedCoin?.price || "N/A"}
                     </span>
                   </div>
                   <div className="token-metric">
                     <span className="token-metric-label">Liquidity</span>
                     <span className="token-metric-value">
                       {tokenMetadata?.tokenData?.liquidity
-                        ? `$${(
-                            parseFloat(tokenMetadata.tokenData.liquidity) /
-                            1000000
-                          ).toFixed(2)}M`
+                        ? `$${formatNumber(tokenMetadata.tokenData.liquidity)}`
                         : "N/A"}
                     </span>
                   </div>
@@ -1709,10 +1851,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                     <span className="token-metric-label">Market Cap</span>
                     <span className="token-metric-value">
                       {tokenMetadata?.tokenData?.marketCap
-                        ? `$${(
-                            parseFloat(tokenMetadata.tokenData.marketCap) /
-                            1000000
-                          ).toFixed(2)}M`
+                        ? `$${formatNumber(tokenMetadata.tokenData.marketCap)}`
                         : "N/A"}
                     </span>
                   </div>
@@ -1720,17 +1859,15 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                     <span className="token-metric-label">FDV</span>
                     <span className="token-metric-value">
                       {tokenMetadata?.tokenData?.fdv
-                        ? `$${(
-                            parseFloat(tokenMetadata.tokenData.fdv) / 1000000
-                          ).toFixed(2)}M`
+                        ? `$${formatNumber(tokenMetadata.tokenData.fdv)}`
                         : "N/A"}
                     </span>
                   </div>
                   <div className="token-metric">
                     <span className="token-metric-label">Holders</span>
                     <span className="token-metric-value">
-                      {tokenMetadata?.tokenData?.holders
-                        ? tokenMetadata.tokenData.holders.toLocaleString()
+                      {tokenMetadata?.tokenData?.holders !== undefined
+                        ? formatNumber(tokenMetadata.tokenData.holders)
                         : "N/A"}
                     </span>
                   </div>
@@ -1738,10 +1875,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                     <span className="token-metric-label">Supply</span>
                     <span className="token-metric-value">
                       {tokenMetadata?.tokenData?.totalSupply
-                        ? `${(
-                            parseFloat(tokenMetadata.tokenData.totalSupply) /
-                            1000000
-                          ).toFixed(2)}M`
+                        ? `${formatNumber(tokenMetadata.tokenData.totalSupply)}`
                         : "N/A"}
                     </span>
                   </div>

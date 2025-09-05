@@ -28,6 +28,21 @@ const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 const activeSubscriptions = new Map<string, () => void>();
 
+function buildWsUrl(wallet?: string) {
+  const base = "wss://m7-api-production.up.railway.app/ws";
+  if (!wallet) return base;
+  const qp = new URLSearchParams({ wallet }).toString();
+  return `${base}?${qp}`;
+}
+
+function normalizeWsMessage(raw: any): any {
+  // Handle variations: { msg: { ... } } or { message: { ... } } or direct object
+  if (!raw) return null;
+  if (raw.msg) return raw.msg;
+  if (raw.message) return raw.message;
+  return raw;
+}
+
 export default {
   onReady: (callback: (configuration: object) => void) => {
     setTimeout(() => callback(configurationData));
@@ -37,10 +52,13 @@ export default {
     onSymbolResolvedCallback: (symbolInfo: LibrarySymbolInfo) => void,
     onResolveErrorCallback: (reason: string) => void
   ) => {
-    const { tokenMetadata, currency, chartType } = JSON.parse(symbolName) as {
+    const { tokenMetadata, currency, chartType, walletAddress } = JSON.parse(
+      symbolName
+    ) as {
       tokenMetadata: HMTokenMetadata;
       currency: "usd" | "whype";
       chartType: "price" | "mcap";
+      walletAddress?: string;
     };
 
     // For single token view, use the token directly
@@ -71,6 +89,7 @@ export default {
       address: tokenMetadata.address,
       desiredAddress: desiredToken?.address,
       currency,
+      walletAddress,
     };
 
     setTimeout(() => onSymbolResolvedCallback(symbolInfo));
@@ -130,6 +149,165 @@ export default {
     onRealtimeCallback: SubscribeBarsCallback,
     subscriberUID: string,
     onResetCacheNeededCallback: () => void
-  ) => {},
-  unsubscribeBars: (subscriberUID: string) => {},
+  ) => {
+    // If this subscriber already exists, clean up first (handles token changes for same UID)
+    const existing = activeSubscriptions.get(subscriberUID);
+    if (existing) {
+      try {
+        existing();
+      } catch {}
+      activeSubscriptions.delete(subscriberUID);
+    }
+
+    const tokenAddress: string =
+      symbolInfo.desiredAddress || symbolInfo.address;
+
+    const ws = new WebSocket(buildWsUrl(symbolInfo.walletAddress));
+    let closed = false;
+    let currentTokenAddress = tokenAddress;
+
+    const sendSubscribe = () => {
+      try {
+        console.log("trying to send subscribe");
+        ws.send(
+          JSON.stringify({
+            message: { TokenData: currentTokenAddress },
+            action: "Subscribe",
+          })
+        );
+      } catch {}
+    };
+
+    const forwardIfMatches = (granularity: string, payload: any) => {
+      // Map resolution to expected granularity string values
+      const resMap: Record<string, string> = {
+        "1S": "1s",
+        "1": "1m",
+        "5": "5m",
+        "15": "15m",
+        "30": "30m",
+        "60": "1h",
+        "120": "2h",
+        "240": "4h",
+        "480": "8h",
+        "1D": "1d",
+        "1W": "1w",
+        // TV sometimes passes compact day/week codes
+        D: "1d",
+        W: "1w",
+      };
+
+      const expected = resMap[resolution] || "1d";
+      if (granularity.toLowerCase() !== expected.toLowerCase()) {
+        // Debug: show why it was filtered
+        // console.debug('[TV WS] Skip candle', { resolution, expected, got: granularity, token: payload?.token });
+        return;
+      }
+
+      // Convert to TradingView bar shape
+      const bar = {
+        time: Number(payload.timestamp) * 1000,
+        open: Number(payload.o),
+        high: Number(payload.h),
+        low: Number(payload.l),
+        close: Number(payload.c),
+        volume: payload.v != null ? Number(payload.v) : undefined,
+      };
+      onRealtimeCallback(bar);
+    };
+
+    ws.onopen = () => {
+      sendSubscribe();
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const parsed = JSON.parse(e.data);
+        const msg = normalizeWsMessage(parsed);
+        if (!msg) return;
+
+        // Guard: ignore price messages not matching current token
+        if (msg.messageType === "price" && msg.data) {
+          const addr = msg.data.address || msg.data.mintAddress;
+          if (!addr || addr !== tokenAddress) {
+            return;
+          }
+          // We don't forward price updates to TradingView, so just ignore even if it matches
+          return;
+        }
+
+        // Price messages are ignored here; we only handle candles
+        if (msg.messageType === "candles" && Array.isArray(msg.data)) {
+          for (const item of msg.data) {
+            // Must match token; accept multiple possible fields
+            const itemAddress =
+              item?.token || item?.address || item?.mintAddress;
+            if (itemAddress && tokenAddress && itemAddress !== tokenAddress)
+              continue;
+            if (!item?.granularity) continue;
+            forwardIfMatches(String(item.granularity), item);
+          }
+        }
+      } catch {}
+    };
+
+    ws.onclose = () => {};
+    ws.onerror = () => {};
+
+    // Monitor for token changes in symbolInfo and resubscribe on the same WS
+    const tokenWatch = setInterval(() => {
+      try {
+        const nextToken = symbolInfo.desiredAddress || symbolInfo.address;
+        if (
+          nextToken &&
+          nextToken !== currentTokenAddress &&
+          ws.readyState === WebSocket.OPEN
+        ) {
+          // Unsubscribe previous token
+          try {
+            ws.send(
+              JSON.stringify({
+                message: { TokenData: currentTokenAddress },
+                action: "Unsubscribe",
+              })
+            );
+          } catch {}
+          // Subscribe new token
+          currentTokenAddress = nextToken;
+          sendSubscribe();
+        }
+      } catch {}
+    }, 1000);
+
+    // Save cleanup for this subscriber
+    activeSubscriptions.set(subscriberUID, () => {
+      if (closed) return;
+      closed = true;
+      try {
+        clearInterval(tokenWatch);
+      } catch {}
+      try {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(
+            JSON.stringify({
+              message: { TokenData: currentTokenAddress },
+              action: "Unsubscribe",
+            })
+          );
+        }
+      } catch {}
+      try {
+        ws.close();
+      } catch {}
+    });
+  },
+  unsubscribeBars: (subscriberUID: string) => {
+    const cleanup = activeSubscriptions.get(subscriberUID);
+    if (cleanup) {
+      try {
+        cleanup();
+      } catch {}
+      activeSubscriptions.delete(subscriberUID);
+    }
+  },
 } as IBasicDataFeed;

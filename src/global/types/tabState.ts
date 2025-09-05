@@ -130,7 +130,7 @@ export type TabState = {
     subtitle: string;
     time: string;
     comments: string;
-    score: string;
+    price: string;
     cap: string;
     holders: number;
     volume: string;

@@ -371,6 +371,7 @@ export interface HMPoolTransaction {
 export interface M7TokenData {
   mintAddress: string;
   price?: string;
+  priceUsd?: string;
   liquidity?: string;
   totalSupply?: string;
   circulatingSupply?: string;
@@ -384,6 +385,9 @@ export interface M7TokenData {
   website?: string;
   twitter?: string;
   discord?: string;
+  curveProgress?: string;
+  solReserves?: string;
+  tokenReserves?: string;
 }
 
 export interface M7TokenMetadataResponse {

@@ -540,6 +540,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
       holders: item.tokenData?.holders || 0,
       volume: formatNumber(item.tokenData?.marketCap),
       change: formatNumber(item.tokenData?.price),
+      price: formatNumber(item.tokenData?.price),
     };
 
     openTradingColumn({

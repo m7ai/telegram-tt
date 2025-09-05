@@ -80,6 +80,7 @@ const createCurrencyButtonHTML = () => {
 export interface ChartSettings {
   chartType: "price" | "mcap";
   currency: "usd" | "whype";
+  wsWalletAddress?: string;
 }
 
 interface TVChartProps {
@@ -145,6 +146,7 @@ const TVChart: FC<TVChartProps> = ({ tokenMetadata, settings }) => {
           tokenMetadata,
           currency,
           chartType,
+          walletAddress: settings.wsWalletAddress,
         }),
         datafeed: Datafeed,
         interval: "1D" as ResolutionString,
