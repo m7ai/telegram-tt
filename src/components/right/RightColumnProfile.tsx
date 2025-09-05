@@ -816,7 +816,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
                           </div>
 
                           <div className="stats-right-group">
-                            <div className="stat-item">
+                            {/* <div className="stat-item">
                               <img
                                 src="/svg/people.svg"
                                 alt="people"
@@ -827,7 +827,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
                               <span className="stat-value">
                                 {formatNumber(item.tokenData?.holders)}
                               </span>
-                            </div>
+                            </div> */}
                             <span className="stat-separator">|</span>
                             <div className="stat-item">
                               <span className="stat-value">$</span>
