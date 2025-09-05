@@ -209,6 +209,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
       if (!mintToSubscribe) return;
       // Subscribe current mint on open
       try {
+        console.log("sending subscribe for", mintToSubscribe);
         ws.send(
           JSON.stringify({
             message: { TokenData: mintToSubscribe },
@@ -222,7 +223,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     ws.onmessage = (e: MessageEvent) => {
       try {
         const msg = JSON.parse(e.data);
-
+        console.log({ msg });
         if (msg?.messageType === "price" && msg?.data?.price) {
           const msgAddress = msg?.data?.address || msg?.data?.mintAddress;
           const currentMint = selectedMintRef.current;
