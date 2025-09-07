@@ -816,18 +816,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
                           </div>
 
                           <div className="stats-right-group">
-                            {/* <div className="stat-item">
-                              <img
-                                src="/svg/people.svg"
-                                alt="people"
-                                className="stat-icon"
-                                width="11"
-                                height="10"
-                              />
-                              <span className="stat-value">
-                                {formatNumber(item.tokenData?.holders)}
-                              </span>
-                            </div> */}
+                           
                             <span className="stat-separator">|</span>
                             <div className="stat-item">
                               <span className="stat-value">$</span>
@@ -835,19 +824,6 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
                                 {formatNumber(item.tokenData?.price)}
                               </span>
                             </div>
-                            {/* <span className="stat-separator">|</span>
-                            <div className="stat-item">
-                              <img
-                                src="/svg/chart.svg"
-                                alt="volume"
-                                className="stat-icon"
-                                width="11"
-                                height="10"
-                              />
-                              <span className="stat-value">
-                                {formatNumber(item.tokenData?.marketCap)}
-                              </span>
-                            </div> */}
                             <span className="stat-separator">|</span>
                             <div className="stat-item mc-group">
                               <span className="stat-value">MC</span>

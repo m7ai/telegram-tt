@@ -15,7 +15,16 @@ import {
 import { RES_TO_INTERVAL } from "./helpers";
 
 const configurationData: DatafeedConfiguration = {
-  supported_resolutions: ["1D", "1W"] as ResolutionString[],
+  supported_resolutions: [
+    "1" as ResolutionString,
+    "5" as ResolutionString,
+    "15" as ResolutionString,
+    "30" as ResolutionString,
+    "60" as ResolutionString,
+    "240" as ResolutionString,
+    "1D" as ResolutionString,
+    "1W" as ResolutionString,
+  ],
   symbols_types: [
     {
       name: "crypto",
@@ -77,7 +86,7 @@ export default {
       exchange: "Solana",
       minmov: 1,
       pricescale: 10 ** 16,
-      has_intraday: false,
+      has_intraday: true,
       has_seconds: false,
       has_weekly_and_monthly: true,
       has_daily: true,
@@ -102,6 +111,19 @@ export default {
     onErrorCallback: (error: string) => void
   ) => {
     const { from, to, countBack } = periodParams;
+
+    // Debug: invoked when timeframe changes or chart needs history
+    try {
+      console.log("[TVChart] getBars called", {
+        resolution,
+        from,
+        to,
+        countBack,
+        symbol: symbolInfo?.address,
+        desired: symbolInfo?.desiredAddress,
+        currency: symbolInfo?.currency,
+      });
+    } catch {}
 
     fetchMintAddressOhlcv(
       symbolInfo.address,
@@ -134,6 +156,12 @@ export default {
         if (noData) {
           console.log("[TVChart] No data in requested range");
         }
+        try {
+          console.log("[TVChart] getBars returning", {
+            bars: formatted.length,
+            noData,
+          });
+        } catch {}
         // Signal noData so TradingView stops requesting older ranges
         // @ts-ignore - meta argument supported by TradingView
         onHistoryCallback(formatted, { noData });
@@ -165,6 +193,35 @@ export default {
     const ws = new WebSocket(buildWsUrl(symbolInfo.walletAddress));
     let closed = false;
     let currentTokenAddress = tokenAddress;
+
+    // Debug: subscribeBars invocation details
+    try {
+      const expectedGranularityForResolution = (() => {
+        const map: Record<string, string> = {
+          "1S": "1s",
+          "1": "1m",
+          "5": "5m",
+          "15": "15m",
+          "30": "30m",
+          "60": "1h",
+          "120": "2h",
+          "240": "4h",
+          "480": "8h",
+          "1D": "1d",
+          "1W": "1w",
+          D: "1d",
+          W: "1w",
+        };
+        return map[String(resolution)] || "1d";
+      })();
+      console.log("[TVChart] subscribeBars", {
+        uid: subscriberUID,
+        resolution,
+        expected: expectedGranularityForResolution,
+        tokenAddress,
+        wallet: symbolInfo?.walletAddress,
+      });
+    } catch {}
 
     const sendSubscribe = () => {
       try {
@@ -218,6 +275,12 @@ export default {
 
     ws.onopen = () => {
       sendSubscribe();
+      try {
+        console.log("[TVChart] WS open and subscribe sent", {
+          token: currentTokenAddress,
+          uid: subscriberUID,
+        });
+      } catch {}
     };
 
     ws.onmessage = (e) => {
@@ -238,6 +301,7 @@ export default {
 
         // Price messages are ignored here; we only handle candles
         if (msg.messageType === "candles" && Array.isArray(msg.data)) {
+          console.log({ wsMsg: msg });
           for (const item of msg.data) {
             // Must match token; accept multiple possible fields
             const itemAddress =
@@ -274,6 +338,12 @@ export default {
           } catch {}
           // Subscribe new token
           currentTokenAddress = nextToken;
+          try {
+            console.log("[TVChart] Resubscribing with new token", {
+              uid: subscriberUID,
+              token: currentTokenAddress,
+            });
+          } catch {}
           sendSubscribe();
         }
       } catch {}
@@ -295,6 +365,12 @@ export default {
             })
           );
         }
+      } catch {}
+      try {
+        console.log("[TVChart] unsubscribeBars cleanup", {
+          uid: subscriberUID,
+          token: currentTokenAddress,
+        });
       } catch {}
       try {
         ws.close();

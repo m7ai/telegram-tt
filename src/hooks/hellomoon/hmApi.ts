@@ -116,15 +116,15 @@ export const fetchMintAddressOhlcv = async (
 }> => {
   // Map intervals to our TradingView endpoint format
   const intervalMap: { [key in OhlcvInterval]: string } = {
-    "1s": "1D", // Not supported, fallback to 1D
-    "1m": "1D", // Not supported, fallback to 1D
-    "5m": "1D", // Not supported, fallback to 1D
-    "15m": "1D", // Not supported, fallback to 1D
-    "30m": "1D", // Not supported, fallback to 1D
-    "1h": "1D", // Not supported, fallback to 1D
-    "2h": "1D", // Not supported, fallback to 1D
-    "4h": "1D", // Not supported, fallback to 1D
-    "8h": "1D", // Not supported, fallback to 1D
+    "1s": "1m", // fallback to the smallest supported
+    "1m": "1m",
+    "5m": "5m",
+    "15m": "15m",
+    "30m": "30m",
+    "1h": "1h",
+    "2h": "1h", // fallback to nearest supported
+    "4h": "4h",
+    "8h": "4h", // fallback to nearest supported
     "1D": "1D",
     "1W": "1W",
   };

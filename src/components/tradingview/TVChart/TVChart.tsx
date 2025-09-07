@@ -179,7 +179,6 @@ const TVChart: FC<TVChartProps> = ({ tokenMetadata, settings }) => {
         time_frames: [
           { text: "1D", resolution: "1D" as ResolutionString, title: "1D" },
           { text: "1W", resolution: "1W" as ResolutionString, title: "1W" },
-          { text: "1M", resolution: "1M" as ResolutionString, title: "1M" },
         ],
         overrides: {
           "scalesProperties.showSeriesLastValue": true,
@@ -191,7 +190,6 @@ const TVChart: FC<TVChartProps> = ({ tokenMetadata, settings }) => {
         custom_css_url: customCssUrl,
         favorites: {
           intervals: [
-            "1S" as ResolutionString,
             "1" as ResolutionString,
             "5" as ResolutionString,
             "15" as ResolutionString,
