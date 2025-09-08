@@ -41,21 +41,21 @@
     flex-direction: column;
     justify-content: flex-end;
 
-    width: 100%;
-    max-width: var(--messages-container-width);
+    width: 85%;
+    max-width: none;
     min-height: 100%;
     margin: 0 auto;
-    padding: 1rem 1rem 0 1.125rem;
+    padding: 1rem 0 0;
 
     .force-messages-scroll & {
       margin-top: 100vh !important;
     }
 
     @media (max-width: 600px) {
-      width: 100vw;
+      width: 85vw;
       // Patch for an issue on Android when rotating device
-      margin: 0;
-      padding: 2.75rem 0.5rem 0;
+      margin: 0 auto;
+      padding: 2.75rem 0 0;
     }
   }
 
@@ -353,7 +353,7 @@
     transition: transform var(--layer-transition);
 
     .messages-container {
-      width: calc(100% - var(--right-column-width));
+      width: 85%;
     }
 
     body.no-right-column-animations & {
@@ -368,7 +368,7 @@
       width: calc(100% - var(--right-column-width));
 
       .messages-container {
-        width: 100%;
+        width: 85%;
       }
     }
   }

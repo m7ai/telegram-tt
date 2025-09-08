@@ -132,7 +132,6 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
   currentUserId,
 }) => {
   const { openTradingColumn } = getActions();
-  const lang = useLang();
   const [isCoinsExpanded, setIsCoinsExpanded] = useState(true);
   const [selectedCoinId, setSelectedCoinId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -145,6 +144,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
   >([]);
   const [hasMoreData, setHasMoreData] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState("");
 
   // Refs for infinite scroll
   // Use the actual scrollable container as root: `.sidebar-content`
@@ -208,6 +208,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
           },
           body: JSON.stringify({
             telegramUserId: currentUserId,
+            ...(searchKeyword?.trim() ? { keyword: searchKeyword.trim() } : {}),
           }),
         }
       );
@@ -244,6 +245,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
             telegramUserId: currentUserId,
             page: currentPage,
             limit: coinsPerPage,
+            ...(searchKeyword?.trim() ? { keyword: searchKeyword.trim() } : {}),
           }),
         }
       );
@@ -280,6 +282,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
             telegramUserId: currentUserId,
             page: currentPage + 1,
             limit: coinsPerPage,
+            ...(searchKeyword?.trim() ? { keyword: searchKeyword.trim() } : {}),
           }),
         }
       );
@@ -311,7 +314,14 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     } finally {
       setIsLoadingMore(false);
     }
-  }, [currentUserId, currentPage, coinsPerPage, isLoadingMore, hasMoreData]);
+  }, [
+    currentUserId,
+    currentPage,
+    coinsPerPage,
+    isLoadingMore,
+    hasMoreData,
+    searchKeyword,
+  ]);
 
   // Add a refresh trigger for wallet balance
   const [walletRefreshTrigger, setWalletRefreshTrigger] = useState(0);
@@ -347,7 +357,6 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
         return;
       }
 
-      console.log("🔄 Received refreshPipelineData event, refreshing data...");
       setLastRefreshTime(now);
       setSuppressCountLoading(true);
       setCurrentPage(1);
@@ -410,6 +419,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     currentUserId,
     coinsPerPage,
     refreshTrigger,
+    searchKeyword,
   ]);
 
   // Update accumulated data when initial data changes
@@ -648,6 +658,20 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
               type="text"
               placeholder="Search coins"
               className="search-input"
+              value={searchKeyword}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSearchKeyword(value);
+                // When search changes, reset list and pagination then re-fetch
+                setAllPipelineData([]);
+                setCurrentPage(1);
+                setHasMoreData(true);
+                loadedIdsRef.current.clear();
+                // If the search was cleared, also refresh to load defaults
+                if (!value.trim()) {
+                  setRefreshTrigger((prev) => prev + 1);
+                }
+              }}
             />
           </div>
         </div>
@@ -798,6 +822,59 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
                               </span>
                             </div>
                           </div>
+
+                          <svg
+                            className="coin-close-icon"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            aria-label="Remove from list"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (!currentUserId) return;
+                              try {
+                                const response = await fetch(
+                                  `${M7_API_URL}/user/delete-pipeline-by-mint`,
+                                  {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({
+                                      telegramUserId: currentUserId,
+                                      mintAddress: item.mintAddress,
+                                    }),
+                                  }
+                                );
+                                if (!response.ok) {
+                                  throw new Error(
+                                    `HTTP error! status: ${response.status}`
+                                  );
+                                }
+                                // Optimistically update UI
+                                setAllPipelineData((prev) =>
+                                  prev.filter((p) => p.id !== item.id)
+                                );
+                                if (selectedCoinId === item.id) {
+                                  setSelectedCoinId(null);
+                                }
+                                // Trigger refetch for counts/list consistency
+                                setRefreshTrigger((prev) => prev + 1);
+                              } catch (err) {
+                                console.error(
+                                  "Failed to delete coin from pipeline:",
+                                  err
+                                );
+                              }
+                            }}
+                          >
+                            <title>Remove from list</title>
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                          </svg>
                         </div>
 
                         {/* Bottom row: Stats */}
@@ -816,8 +893,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
                           </div>
 
                           <div className="stats-right-group">
-                           
-                            <span className="stat-separator">|</span>
+                            {/* <span className="stat-separator">|</span> */}
                             <div className="stat-item">
                               <span className="stat-value">$</span>
                               <span className="stat-value change-value">
@@ -825,16 +901,51 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
                               </span>
                             </div>
                             <span className="stat-separator">|</span>
-                            <div className="stat-item mc-group">
+                            <div
+                              className={`stat-item mc-group ${
+                                Number(item.tokenData?.marketCap ?? 0) < 100000
+                                  ? "mc-white"
+                                  : Number(item.tokenData?.marketCap ?? 0) <
+                                    1000000
+                                  ? "mc-yellow"
+                                  : "mc-green"
+                              }`}
+                            >
                               <span className="stat-value">MC</span>
                               <img
-                                src="/svg/mc.svg"
+                                src={
+                                  Number(item.tokenData?.marketCap ?? 0) <
+                                  100000
+                                    ? "/svg/mc-white.svg"
+                                    : Number(item.tokenData?.marketCap ?? 0) <
+                                      1000000
+                                    ? "/svg/mc-yellow.svg"
+                                    : "/svg/mc-green.svg"
+                                }
                                 alt="market cap"
-                                className="stat-icon"
+                                className={`stat-icon ${
+                                  Number(item.tokenData?.marketCap ?? 0) <
+                                  100000
+                                    ? "mc-white"
+                                    : Number(item.tokenData?.marketCap ?? 0) <
+                                      1000000
+                                    ? "mc-yellow"
+                                    : "mc-green"
+                                }`}
                                 width="11"
                                 height="10"
                               />
-                              <span className="stat-value change-value">
+                              <span
+                                className={`stat-value mc-value ${
+                                  Number(item.tokenData?.marketCap ?? 0) <
+                                  100000
+                                    ? "mc-white"
+                                    : Number(item.tokenData?.marketCap ?? 0) <
+                                      1000000
+                                    ? "mc-yellow"
+                                    : "mc-green-fixed"
+                                }`}
+                              >
                                 {formatNumber(item.tokenData?.marketCap)}
                               </span>
                             </div>
