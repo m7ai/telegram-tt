@@ -38,7 +38,7 @@ const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const activeSubscriptions = new Map<string, () => void>();
 
 function buildWsUrl(wallet?: string) {
-  const base = "wss://m7-api-production.up.railway.app/ws";
+  const base = "wss://indexer-api-production.up.railway.app/ws";
   if (!wallet) return base;
   const qp = new URLSearchParams({ wallet }).toString();
   return `${base}?${qp}`;

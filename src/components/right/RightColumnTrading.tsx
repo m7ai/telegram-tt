@@ -198,7 +198,7 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
       } catch {}
     }
 
-    const url = `wss://m7-api-production.up.railway.app/ws?wallet=${encodeURIComponent(
+    const url = `wss://indexer-api-production.up.railway.app/ws?wallet=${encodeURIComponent(
       wsWalletAddress
     )}`;
     const ws = new WebSocket(url);
