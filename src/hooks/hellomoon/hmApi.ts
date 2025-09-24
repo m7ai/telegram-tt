@@ -453,7 +453,7 @@ export const buySwap = async (
   request: BuySwapRequest
 ): Promise<BuySwapResponse> => {
   try {
-    const response = await axios.post(`${M7_API_URL}/solana/buySwap`, request, {
+    const response = await axios.post(`${M7_API_URL}/solana/buySwapV2`, request, {
       headers: {
         "Content-Type": "application/json",
       },
@@ -539,7 +539,7 @@ export const sellSwap = async (
 ): Promise<BuySwapResponse> => {
   try {
     const response = await axios.post(
-      `${M7_API_URL}/solana/sellSwap`,
+      `${M7_API_URL}/solana/sellSwapV2`,
       request,
       {
         headers: {
