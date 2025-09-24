@@ -135,7 +135,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
   const [isCoinsExpanded, setIsCoinsExpanded] = useState(true);
   const [selectedCoinId, setSelectedCoinId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [coinsPerPage] = useState(10);
+  const [coinsPerPage] = useState(75);
   const [logoLoadErrors, setLogoLoadErrors] = useState<Set<string>>(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
@@ -492,7 +492,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
     }
   }, [allPipelineData, hasMoreData, isLoadingMore, loadMoreData]);
 
-  // Manual scroll fallback near-bottom detection
+  // Manual scroll fallback: start loading when user scrolled past 50%
   useEffect(() => {
     const el = sidebarContentRef.current;
     if (!el) return;
@@ -505,9 +505,9 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
       if (delta <= 0) return;
       lastUserScrollTimeRef.current = Date.now();
       if (!hasMoreData || isLoadingMore || isPipelineLoading) return;
-      const thresholdPx = 300;
-      const distanceToBottom = el.scrollHeight - currentTop - el.clientHeight;
-      if (distanceToBottom <= thresholdPx) {
+      const totalScrollable = Math.max(1, el.scrollHeight - el.clientHeight);
+      const scrolledRatio = currentTop / totalScrollable;
+      if (scrolledRatio >= 0.5) {
         const now = Date.now();
         if (now - lastLoadMoreAtRef.current > 800) {
           lastLoadMoreAtRef.current = now;
@@ -990,7 +990,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
             Clear coins
           </button>
         </div>
-        <div className="footer-right">
+        {/* <div className="footer-right">
           <button className="footer-action-button buy-button">
             <svg
               className="zap-icon"
@@ -1022,7 +1022,7 @@ const RightColumnProfile: FC<OwnProps & StateProps> = ({
               />
             </button>
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

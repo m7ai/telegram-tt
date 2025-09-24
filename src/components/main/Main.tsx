@@ -118,6 +118,7 @@ import WaveContainer from "./visualEffects/WaveContainer";
 import "./Main.scss";
 import Button from "../ui/Button";
 import Icon from "../common/icons/Icon";
+import Footer from "./Footer";
 
 interface WalletData {
   balance: number;
@@ -689,6 +690,7 @@ const Main = ({
 
   return (
     <div ref={containerRef} id="Main" className={className}>
+      {/* NAVBAR */}
       <div className="app-navbar" role="navigation" aria-label="Primary">
         <div className="navbar-left">
           <div className="brand">
@@ -803,6 +805,8 @@ const Main = ({
       <DeleteFolderDialog folder={deleteFolderDialog} />
       <ReactionPicker isOpen={isReactionPickerOpen} />
       <DeleteMessageModal isOpen={isDeleteMessageModalOpen} />
+      {/* FOOTER */}
+      <Footer />
     </div>
   );
 };

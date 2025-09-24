@@ -163,10 +163,11 @@
 
     display: flex;
     align-items: flex-end;
+    align-self: stretch;
 
     width: 100%;
-    max-width: var(--messages-container-width);
     padding: 0 1rem;
+    box-sizing: border-box;
 
     transition: top 200ms, transform var(--layer-transition);
 
@@ -235,10 +236,10 @@
     }
 
     @media (min-width: 1276px) {
-      width: calc(100% - var(--right-column-width));
+      // width: calc(100% - var(--right-column-width));
 
       #Main.right-column-open & {
-        transform: translate3d(calc(var(--right-column-width) / -2), 0, 0);
+        // transform: translate3d(calc(var(--right-column-width) / -2), 0, 0);
       }
     }
 

@@ -219,7 +219,7 @@ export default function createConfig(
         ELECTRON_HOST_URL,
         BASE_URL,
         VIVA_API_KEY: '',
-        M7_API_URL: process.env.M7_API_URL || 'https://m7-be-production.up.railway.app',
+        M7_API_URL: process.env.M7_API_URL || 'https://m7-be.up.railway.app',
       }),
       // Updates each dev re-build to provide current git branch or commit hash
       new DefinePlugin({
