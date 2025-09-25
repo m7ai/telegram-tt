@@ -27,6 +27,7 @@ import {
   fetchTokenMetadata,
   buySwap,
   sellSwap,
+  confirmSwap,
   type BuySwapRequest,
   type SellSwapRequest,
 } from "../../hooks/hellomoon/hmApi";
@@ -136,6 +137,9 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
     transactionMessage?: string;
     transactionLogs?: string[];
   } | null>(null);
+  const [swapConfirmStage, setSwapConfirmStage] = useState<
+    "idle" | "sent" | "confirmed"
+  >("idle");
   const [isSyncingHoldings, setIsSyncingHoldings] = useState(false);
   const syncingStartRef = useRef<number>(0);
 
@@ -482,11 +486,13 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
 
   const handleCloseTransaction = useLastCallback(() => {
     setLastTransactionId(null);
+    setSwapConfirmStage("idle");
   });
 
   const handleCloseError = useLastCallback(() => {
     setSwapError(null);
     setSwapErrorDetails(null);
+    setSwapConfirmStage("idle");
   });
 
   // Preset editor state
@@ -644,6 +650,20 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
 
       // Store the transaction ID for display
       setLastTransactionId(result.transactionId);
+
+      // Mark as sent and confirm on-chain in background
+      setSwapConfirmStage("sent");
+      (async () => {
+        try {
+          await confirmSwap(result.transactionId);
+          if (isMountedRef.current) {
+            setSwapConfirmStage("confirmed");
+          }
+        } catch (e) {
+          // keep stage as 'sent' on error; user can check Solscan link
+          console.error("confirmSwap failed", e);
+        }
+      })();
 
       // Switch from processing to syncing state and start balance refresh/polling
       setIsSwapLoading(false);
@@ -1191,6 +1211,55 @@ const RightColumnTrading: FC<OwnProps & StateProps> = ({
                           <line x1="6" y1="6" x2="18" y2="18"></line>
                         </svg>
                       </button>
+                    </div>
+                    <div className="transaction-status">
+                      <div className="transaction-status-item">
+                        <svg
+                          className="status-icon"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span>Swap Sent</span>
+                      </div>
+                      <div className="transaction-status-item">
+                        {swapConfirmStage === "confirmed" ? (
+                          <svg
+                            className="status-icon"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                          </svg>
+                        ) : (
+                          <svg
+                            className="status-icon"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M12 6v6l4 2"></path>
+                          </svg>
+                        )}
+                        <span>
+                          {swapConfirmStage === "confirmed"
+                            ? "Swap Confirmed"
+                            : "Awaiting Confirmation"}
+                        </span>
+                      </div>
                     </div>
                     <div className="transaction-id">
                       <span className="transaction-label">Transaction ID:</span>

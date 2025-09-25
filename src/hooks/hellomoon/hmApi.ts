@@ -453,11 +453,15 @@ export const buySwap = async (
   request: BuySwapRequest
 ): Promise<BuySwapResponse> => {
   try {
-    const response = await axios.post(`${M7_API_URL}/solana/buySwapV2`, request, {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await axios.post(
+      `${M7_API_URL}/solana/buySwapV2`,
+      request,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
     return response.data;
   } catch (error) {
@@ -553,6 +557,25 @@ export const sellSwap = async (
     if (axios.isAxiosError(error)) {
       throw new Error(
         `Failed to execute sell swap: ${error.response?.status} ${
+          error.response?.statusText || error.message
+        }`
+      );
+    }
+    throw error;
+  }
+};
+
+// Confirm swap by transaction id (server waits for processed confirmation)
+export const confirmSwap = async (transactionId: string): Promise<any> => {
+  try {
+    const res = await axios.get(`${M7_API_URL}/solana/confirmSwap`, {
+      params: { transactionId },
+    });
+    return res.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new Error(
+        `Failed to confirm swap: ${error.response?.status} ${
           error.response?.statusText || error.message
         }`
       );
