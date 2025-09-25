@@ -119,7 +119,7 @@ const Footer = ({ currentUserId }: StateProps) => {
               <span>—</span>
             ) : holdings && holdings.length > 0 ? (
               <>
-                {holdings.slice(0, 3).map((h) => (
+                {holdings.map((h) => (
                   <span className="wallet-holding-item" key={h.mintAddress}>
                     {h.logoUri ? (
                       <img

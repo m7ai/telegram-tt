@@ -173,9 +173,13 @@
       align-items: center;
       gap: 0.25rem;
       margin-left: 6px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      white-space: nowrap;
+      -webkit-overflow-scrolling: touch;
 
       .wallet-holding-item {
-        display: flex;
+        display: inline-flex;
         align-items: center;
         gap: 0.35rem;
         padding-left: 12px;
